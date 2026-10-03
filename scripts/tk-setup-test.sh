@@ -13,7 +13,7 @@ pass() { "$hook" 2>/dev/null || { echo "FAIL: expected pass: $1"; exit 1; }; }
 reject() { ! "$hook" 2>/dev/null || { echo "FAIL: expected reject: $1"; exit 1; }; }
 
 pass "fresh setup"
-note tools/INDEX.md '[]'
+note tools/kubectl.md '[]'
 note tools/rtk.md '[+2026-10-03, -2026-09-20]'
 pass "valid notes"
 
@@ -22,9 +22,6 @@ reject "6 votes"
 note tools/rtk.md '[2026-10-03]'
 reject "unsigned vote"
 note tools/rtk.md '[+2026-10-03]'
-mkdir empty-dir
-reject "dir without INDEX.md"
-rmdir empty-dir
 printf -- '---\nkeywords: [k]\n' > tools/short.md
 reject "truncated frontmatter"
 : > tools/short.md

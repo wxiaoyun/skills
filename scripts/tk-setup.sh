@@ -1,22 +1,12 @@
 #!/bin/sh
-# Sets up ~/tk for the tribal-knowledge skill: git repo, root INDEX.md, and a
-# pre-commit hook that checks note format. Safe to rerun. Rerunning updates the hook.
+# Sets up ~/tk for the tribal-knowledge skill: a git repo with a pre-commit hook
+# that checks note format. Safe to rerun. Rerunning updates the hook.
 set -eu
 
 TK="$HOME/tk"
 mkdir -p "$TK"
 cd "$TK"
 [ -d .git ] || git init -q
-
-if [ ! -f INDEX.md ]; then
-  cat > INDEX.md <<'EOF'
----
-keywords: [tk, tribal-knowledge]
-index: Root of the tribal knowledge base, holds knowledge spanning every area
-votes: []
----
-EOF
-fi
 
 mkdir -p .git/hooks
 cat > .git/hooks/pre-commit <<'HOOK'
@@ -25,9 +15,6 @@ cat > .git/hooks/pre-commit <<'HOOK'
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
 errors=$(
-  find . -type d ! -path '*/.*' | while IFS= read -r d; do
-    [ -f "$d/INDEX.md" ] || echo "$d: missing INDEX.md"
-  done
   find . -type f -name '*.md' ! -path '*/.*' -empty -exec echo "{}: empty note" \;
   find . -type f -name '*.md' ! -path '*/.*' -exec awk '
     function bad(msg) { print FILENAME ": " msg }
