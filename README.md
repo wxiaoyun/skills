@@ -1,0 +1,31 @@
+# skills
+
+Agent skills, installable with [`npx skills`](https://github.com/vercel-labs/skills).
+
+## tribal-knowledge
+
+Agents keep a version-controlled knowledge base at `~/tk` of hard-won understanding (tool pitfalls, how repos and services connect, environment facts) and search it in later sessions. Each note carries agent votes, so notes that drifted from reality get noticed.
+
+Install the skill:
+
+```sh
+npx skills add wxiaoyun/skills -g --skill tribal-knowledge
+```
+
+Set up `~/tk` as a git repo with a root `INDEX.md` and a pre-commit hook that checks note format. Safe to rerun, and rerunning updates the hook:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/wxiaoyun/skills/master/scripts/tk-setup.sh | sh
+```
+
+To sync across machines, add a git remote to `~/tk`. Agents push after each commit when a remote exists.
+
+Optional: agents load skills by matching descriptions, which can miss. Add this line to your global `AGENTS.md` or `CLAUDE.md` to make the habit stick:
+
+```markdown
+- Before working with a tool, repo, or service, search `~/tk` per the tribal-knowledge skill, and record hard-won findings there.
+```
+
+## License
+
+[MIT](LICENSE)
