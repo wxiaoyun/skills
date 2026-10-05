@@ -12,18 +12,18 @@ Install the skill:
 npx skills add wxiaoyun/skills -g --skill tribal-knowledge
 ```
 
-Set up `~/tk` as a git repo with a pre-commit hook that checks note format. Safe to rerun, and rerunning updates the hook:
+Set up `~/tk` as a git repo with a pre-commit hook that checks note format and links. Safe to rerun, and rerunning updates the hook:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/wxiaoyun/skills/master/scripts/tk-setup.sh | sh
 ```
 
-To sync across machines, add a git remote to `~/tk`. Agents push after each commit when a remote exists.
+To sync across machines, add a git remote to `~/tk`. Agents rebase onto it and push after each commit when a remote exists.
 
 Required: agents load skills by matching descriptions, which often misses. Add this line to your global `AGENTS.md` or `CLAUDE.md` so the skill actually gets used:
 
 ```markdown
-- Before working with a tool, repo, or service, search `~/tk` per the tribal-knowledge skill, and record hard-won findings there.
+- Before working with a tool, repo, or service, search `~/tk` per the tribal-knowledge skill. Record hard-won findings there as you learn them, and vote and record before your final answer.
 ```
 
 ## License

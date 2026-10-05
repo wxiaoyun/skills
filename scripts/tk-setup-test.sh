@@ -8,7 +8,7 @@ sh "$(dirname "$0")/tk-setup.sh" >/dev/null
 cd "$HOME/tk"
 hook=.git/hooks/pre-commit
 
-note() { mkdir -p "$(dirname "$1")"; printf -- '---\nkeywords: [k]\nindex: i\nvotes: %s\n---\nbody\n' "$2" > "$1"; }
+note() { mkdir -p "$(dirname "$1")"; printf -- '---\nkeywords: [k]\nindex: i\nvotes: %s\n---\n%s\n' "$2" "${3:-body}" > "$1"; }
 pass() { "$hook" 2>/dev/null || { echo "FAIL: expected pass: $1"; exit 1; }; }
 reject() { ! "$hook" 2>/dev/null || { echo "FAIL: expected reject: $1"; exit 1; }; }
 
@@ -21,6 +21,10 @@ note tools/rtk.md '[+2026-10-03, +2026-10-02, +2026-10-01, +2026-09-30, +2026-09
 reject "6 votes"
 note tools/rtk.md '[2026-10-03]'
 reject "unsigned vote"
+note tools/rtk.md '[+2026-09-20, +2026-10-03]'
+reject "votes oldest first"
+note tools/rtk.md '[+2026-10-03, -2026-10-03]'
+pass "same-day votes"
 note tools/rtk.md '[+2026-10-03]'
 printf -- '---\nkeywords: [k]\n' > tools/short.md
 reject "truncated frontmatter"
@@ -30,5 +34,13 @@ rm tools/short.md
 printf -- '---\nindex: i\nkeywords: [k]\nvotes: []\n---\n' > tools/order.md
 reject "wrong field order"
 rm tools/order.md
+
+note history/outage-2026-09-21.md '[+2026-09-21]'
+reject "votes on a dated record"
+note history/outage-2026-09-21.md '[]' 'see [rtk](../tools/rtk.md#flags), [docs](https://x.y/z), [top](#top)'
+pass "dated record without votes, valid links"
+note history/outage-2026-09-21.md '[]' 'see [gone](../tools/gone.md)'
+reject "broken link"
+note history/outage-2026-09-21.md '[]'
 pass "back to valid"
 echo ok
