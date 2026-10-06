@@ -12,7 +12,13 @@ mkdir -p .git/hooks
 cat > .git/hooks/pre-commit <<'HOOK'
 #!/bin/sh
 # Checks every tk note and its links. Installed by tk-setup.sh from github.com/wxiaoyun/skills.
+# Checks the staged snapshot, not the working tree, so another agent's unstaged
+# half-written note cannot block an unrelated commit.
 cd "$(git rev-parse --show-toplevel)" || exit 1
+snap=$(mktemp -d) || exit 1
+trap 'rm -rf "$snap"' EXIT
+git checkout-index -a --prefix="$snap/" || exit 1
+cd "$snap" || exit 1
 tab=$(printf '\t')
 
 errors=$(
