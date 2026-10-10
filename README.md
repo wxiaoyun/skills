@@ -23,7 +23,7 @@ To sync across machines, add a git remote to `~/tk`. Agents rebase onto it and p
 Required: agents load skills by matching descriptions, which often misses. Add this line to your global `AGENTS.md` or `CLAUDE.md` so the skill actually gets used:
 
 ```markdown
-- Before working with a tool, repo, or service, search `~/tk` per the tribal-knowledge skill. Record hard-won findings there as you learn them, and vote and record before your final answer.
+- Before working with a tool, repo, or service, load the `tribal-knowledge` skill first, then search `~/tk` with its keyword search. Record hard-won findings there as you learn them, and vote and record before your final answer.
 ```
 
 ## License

@@ -66,27 +66,28 @@ A record captures one investigation or incident and is true for its date only. W
 Narrow by keywords, then judge candidates by their `index` and `votes` lines before opening any note:
 
 ```sh
-rg -i -A2 '^keywords:.*\b(rtk|proxy)\b' ~/tk
+rg -il '^keywords:.*\b(rtk|proxy)\b' ~/tk | xargs -r rg -H -m2 '^(index|votes):'
 ```
 
-`\b` keeps to whole keywords. When nothing turns up, drop it for a wider net, since substrings also hit snake_case names (`sync` finds `order_sync_worker`).
+`\b` keeps to whole keywords. When nothing turns up, drop it for a wider net, since substrings also hit snake_case names (`sync` finds `order_sync_worker`). When too much turns up, require a second term by inserting `| xargs -r rg -il '<term>'` before the last `xargs`.
 
-When keywords miss, search full text but print only each matching note's `index` line:
+When keywords miss, search full text the same way:
 
 ```sh
-rg -il 'connection reset' ~/tk | xargs -r rg -H -m1 '^index:'
+rg -il 'connection reset' ~/tk | xargs -r rg -H -m2 '^(index|votes):'
 ```
 
 - `rg` prints in walk order, not relevance, so `| head` drops arbitrary notes.
 - Records match too. Add `-g '!*-20[0-9][0-9]-[0-9][0-9]-[0-9][0-9].md'` to skip them.
+- Open a long note at its matching lines (`rg -n -C8 '<term>' <note>`) rather than reading it whole.
 
 ## Votes
 
-`votes` keeps the 5 most recent verdicts, newest first. `+YYYY-MM-DD` confirms and `-YYYY-MM-DD` contradicts. Before relying on a claim, re-check its evidence and vote on the result, at most once per note per session.
+`votes` keeps the 5 most recent verdicts, newest first. `+YYYY-MM-DD` confirms and `-YYYY-MM-DD` contradicts. Before relying on a claim, re-check its evidence and vote on the result, at most once per note per session. Vote with `sh <this skill's directory>/vote.sh <note> +` (or `-`), which prepends today's vote and keeps the newest 5.
 
-- The evidence holds: prepend `+today`.
+- The evidence holds: vote `+`.
 - The note is wrong and you know the truth: fix it, drop any related `DISPUTED` line, and reset votes to `[+today]`.
-- The note looks wrong but the truth is unclear: prepend `-today` and add `> DISPUTED YYYY-MM-DD: <reason>` next to the claim.
+- The note looks wrong but the truth is unclear: vote `-` and add `> DISPUTED YYYY-MM-DD: <reason>` next to the claim.
 - A new note starts at `[+today]`.
 
 ## Writing
@@ -99,12 +100,14 @@ rg -il 'connection reset' ~/tk | xargs -r rg -H -m1 '^index:'
 
 ## Saving
 
-After each change, commit, and if a remote exists, rebase onto it and push. The run id is the first 8 characters of `$CLAUDE_CODE_SESSION_ID`, `$PI_SESSION_ID` or `$CODEX_THREAD_ID`.
+After each change, commit only the paths you changed, since other sessions edit `~/tk` at the same time and their half-done work sits in the same worktree. If a remote exists, rebase onto it and push. The run id is the first 8 characters of `$CLAUDE_CODE_SESSION_ID`, `$PI_SESSION_ID` or `$CODEX_THREAD_ID`.
 
 ```sh
-git -C ~/tk add -A && git -C ~/tk commit -m 'tk: <what changed> (<run-id>)'
+git -C ~/tk add -- <paths> && git -C ~/tk commit -m 'tk: <what changed> (<run-id>)' -- <paths>
 [ -n "$(git -C ~/tk remote)" ] && git -C ~/tk pull --rebase --autostash && git -C ~/tk push
 ```
+
+Write the paths out literally, since zsh does not word-split a `$VAR` holding several.
 
 The pre-commit hook checks note format and links. Fix what it reports and retry once. A failed save never blocks your answer.
 
