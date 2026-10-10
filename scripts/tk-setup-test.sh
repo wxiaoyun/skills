@@ -50,4 +50,8 @@ note history/outage-2026-09-21.md '[]' 'see [gone](../tools/gone.md)'
 reject "broken link"
 note history/outage-2026-09-21.md '[]'
 pass "back to valid"
+note tools/big.md '[]' "$(printf '%13000s' | tr ' ' x)"
+git add -A
+"$hook" 2>&1 | grep -q 'tools/big.md is 13 KB' || { echo "FAIL: size warning"; exit 1; }
+pass "size warning does not block"
 echo ok

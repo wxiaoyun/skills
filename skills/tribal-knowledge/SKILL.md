@@ -51,7 +51,6 @@ Free-form body. Terse, pitfalls first. See also [kubectl](kubectl.md).
 - `index`: one line telling a reader whether the note has what they need, in the form "when to open it. what it holds."
 - Back every claim with evidence the next reader can re-check: file path and symbol (cite code as `<repo>:<path>`), command, tool version, or URL.
 - Link related notes with relative markdown links. The pre-commit hook rejects links that do not resolve.
-- Consider splitting a note past ~300 lines.
 
 ## Records
 
@@ -95,6 +94,7 @@ rg -il 'connection reset' ~/tk | xargs -r rg -H -m2 '^(index|votes):'
 - Write as soon as you learn something, not at the end of the task. Before your final answer, make sure every note you relied on got its vote and every finding got recorded.
 - Search first and update an existing note rather than adding a duplicate.
 - When you add to a note, extend its `keywords` and `index` to cover the addition. If `index` no longer fits on one line, split the note.
+- Keep notes under ~12 KB. When an edit takes a note past that, move the section you are editing into its own note in the directory named after this one, with its own `keywords` and `index`, and leave a one-line link in its place.
 - When a search missed a note that turned out relevant, add the missed terms to its `keywords`.
 - If `~/tk` does not exist, ask the user to run the setup script from https://github.com/wxiaoyun/skills.
 
