@@ -54,4 +54,12 @@ note tools/big.md '[]' "$(printf '%13000s' | tr ' ' x)"
 git add -A
 "$hook" 2>&1 | grep -q 'tools/big.md is 13 KB' || { echo "FAIL: size warning"; exit 1; }
 pass "size warning does not block"
+note tools/long.md '[]' "- $(printf '%700s' | tr ' ' x)"
+git add -A
+"$hook" 2>&1 | grep -q 'tools/long.md has 1 lines over 600 characters (longest 702 at line 6)' || { echo "FAIL: long line warning"; exit 1; }
+pass "long line warning does not block"
+note tools/long.md '[]' "| $(printf '%700s' | tr ' ' x) |"
+git add -A
+! "$hook" 2>&1 | grep -q 'tools/long.md has' || { echo "FAIL: table row warned"; exit 1; }
+pass "long table row does not warn"
 echo ok

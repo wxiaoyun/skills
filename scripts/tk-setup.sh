@@ -15,10 +15,13 @@ cat > .git/hooks/pre-commit <<'HOOK'
 # Checks the staged snapshot, not the working tree, so another agent's unstaged
 # half-written note cannot block an unrelated commit.
 cd "$(git rev-parse --show-toplevel)" || exit 1
-# Warns, without blocking, when a note in this commit grows past ~12 KB.
+# Warns, without blocking, when a note in this commit grows past ~12 KB or holds body
+# lines over 600 characters (table rows excepted), which make line-range reads large.
 git diff --cached --name-only --diff-filter=AM -- '*.md' | while read -r f; do
   n=$(git show ":$f" | wc -c)
   [ "$n" -le 12000 ] || echo "tk: warning: $f is $((n / 1000)) KB, move the section you edited into its own note (tribal-knowledge skill)" >&2
+  long=$(git show ":$f" | awk 'NR > 5 && !/^[ \t]*[|]/ && length($0) > 600 { n++; if (length($0) > m) { m = length($0); l = NR } } END { if (n) print n " lines over 600 characters (longest " m " at line " l ")" }')
+  [ -z "$long" ] || echo "tk: warning: $f has $long, break them into one fact per bullet (tribal-knowledge skill)" >&2
 done
 snap=$(mktemp -d) || exit 1
 trap 'rm -rf "$snap"' EXIT

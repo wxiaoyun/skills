@@ -50,6 +50,7 @@ Free-form body. Terse, pitfalls first. See also [kubectl](kubectl.md).
 - `keywords`: what someone would search to find this note. Exact identifiers verbatim with case kept (binary, repo, service, table and command names, env vars, error strings). Aliases and plain concepts in lowercase kebab-case. No commas inside a keyword. A generic platform word only when the note is mainly about that platform.
 - `index`: one line telling a reader whether the note has what they need, in the form "when to open it. what it holds."
 - Back every claim with evidence the next reader can re-check: file path and symbol (cite code as `<repo>:<path>`), command, tool version, or URL.
+- Write one fact per bullet and keep body lines under ~600 characters (tables excepted), so a line-range read or `rg -n -C8` stays small. The pre-commit hook warns past that.
 - Link related notes with relative markdown links. The pre-commit hook rejects links that do not resolve.
 
 ## Records
