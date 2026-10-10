@@ -20,6 +20,12 @@ curl -fsSL https://raw.githubusercontent.com/wxiaoyun/skills/master/scripts/tk-s
 
 To sync across machines, add a git remote to `~/tk`. Agents rebase onto it and push after each commit when a remote exists.
 
+To find hot notes, rank them by how much context agents spent reading them, using Claude Code and pi session logs. Split the top ones, or move their most-read sections into separate notes:
+
+```sh
+python3 scripts/tk-usage.py --days 7
+```
+
 Required: agents load skills by matching descriptions, which often misses. Add this line to your global `AGENTS.md` or `CLAUDE.md` so the skill actually gets used:
 
 ```markdown
