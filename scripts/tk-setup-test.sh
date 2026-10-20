@@ -3,9 +3,11 @@
 set -eu
 
 vote="$(cd "$(dirname "$0")/../skills/tribal-knowledge" && pwd)/vote.sh"
-export HOME="$(mktemp -d)"
+find="$(dirname "$vote")/find.sh"
+setup="$(cd "$(dirname "$0")" && pwd)/tk-setup.sh"
+export HOME="$(mktemp -d)" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 trap 'rm -rf "$HOME"' EXIT
-sh "$(dirname "$0")/tk-setup.sh" >/dev/null
+sh "$setup" >/dev/null
 cd "$HOME/tk"
 hook=.git/hooks/pre-commit
 
@@ -50,16 +52,71 @@ note history/outage-2026-09-21.md '[]' 'see [gone](../tools/gone.md)'
 reject "broken link"
 note history/outage-2026-09-21.md '[]'
 pass "back to valid"
-note tools/big.md '[]' "$(printf '%13000s' | tr ' ' x)"
+git commit -qm base
+
+body() { printf "%$1s" | tr ' ' x | fold -w 100; }
+note tools/big.md '[]' "$(body 13000)"
 git add -A
-"$hook" 2>&1 | grep -q 'tools/big.md is 13 KB' || { echo "FAIL: size warning"; exit 1; }
-pass "size warning does not block"
+"$hook" 2>&1 | grep -q 'tools/big.md: body grew to 13 KB' || { echo "FAIL: size message"; exit 1; }
+reject "new note past 12 KB"
+git commit -qm big --no-verify
+sh "$vote" tools/big.md + >/dev/null
+pass "vote on a note already past 12 KB"
+note tools/big.md '[]' "$(body 12500)"
+pass "shrinking a note still past 12 KB"
+note tools/big.md '[]' "$(body 13500)"
+reject "growing a note past 12 KB"
+git rm -qf tools/big.md && git commit -qm unbig
+
 note tools/long.md '[]' "- $(printf '%700s' | tr ' ' x)"
 git add -A
-"$hook" 2>&1 | grep -q 'tools/long.md has 1 lines over 600 characters (longest 702 at line 6)' || { echo "FAIL: long line warning"; exit 1; }
-pass "long line warning does not block"
+"$hook" 2>&1 | grep -q 'tools/long.md: line 6 is 702 characters' || { echo "FAIL: long line message"; exit 1; }
+reject "new long line"
+git commit -qm long --no-verify
+printf -- 'short\n' >> tools/long.md
+pass "existing long line untouched"
 note tools/long.md '[]' "| $(printf '%700s' | tr ' ' x) |"
-git add -A
-! "$hook" 2>&1 | grep -q 'tools/long.md has' || { echo "FAIL: table row warned"; exit 1; }
-pass "long table row does not warn"
+pass "long table row"
+
+printf -- '---\nkeywords: [%s]\nindex: i\nvotes: []\n---\nbody\n' "$(seq -s ', ' 31)" > tools/kw.md
+reject "31 keywords"
+printf -- '---\nkeywords: [k]\nindex: %s\nvotes: []\n---\nbody\n' "$(printf '%300s' | tr ' ' x)" > tools/kw.md
+reject "index over 300 characters"
+git commit -qm kw --no-verify
+printf -- 'more\n' >> tools/kw.md
+pass "unchanged long index"
+git rm -qf tools/kw.md tools/long.md && git commit -qm clean
+
+printf -- '---\nkeywords: [rtk, proxy]\nindex: rtk note\nvotes: [+2026-10-01]\n---\nrtk proxy body\n' > tools/rtk.md
+printf -- '---\nkeywords: [legacy]\nindex: old note\nvotes: [+2026-10-09]\n---\nmentions RTK\n' > tools/old.md
+out=$(sh "$find" rtk proxy)
+printf '%s\n' "$out" | grep -q '^2 notes match (1 by keyword)' || { echo "FAIL: find.sh counts: $out"; exit 1; }
+[ "$(printf '%s\n' "$out" | sed -n 2p | cut -d' ' -f1)" = tools/rtk.md ] || { echo "FAIL: find.sh ranks keyword hits first: $out"; exit 1; }
+sh "$find" -n 1 rtk | grep -q '^1 more rank lower' || { echo "FAIL: find.sh -n"; exit 1; }
+sh "$find" nothing-here | grep -q '^0 notes match' || { echo "FAIL: find.sh no match"; exit 1; }
+sh "$find" -o tools/rtk.md | grep -q '^6: rtk proxy body' || { echo "FAIL: find.sh -o"; exit 1; }
+
+save="$(dirname "$vote")/save.sh"
+git init -q --bare "$HOME/remote.git" && git remote add origin "$HOME/remote.git" && git push -qu origin HEAD 2>/dev/null
+git clone -q "$HOME/remote.git" "$HOME/other"
+printf -- '---\nkeywords: [o]\nindex: o\nvotes: []\n---\nbody\n' > "$HOME/other/tools/other.md"
+git -C "$HOME/other" add -A && git -C "$HOME/other" commit -qm other && git -C "$HOME/other" push -q 2>/dev/null
+note tools/saved.md '[]'
+CLAUDE_CODE_SESSION_ID=abcdefgh123 sh "$save" 'add saved' tools/saved.md >/dev/null || { echo "FAIL: save.sh"; exit 1; }
+[ "$(git --git-dir="$HOME/remote.git" log -1 --format=%s)" = 'tk: add saved (abcdefgh)' ] || { echo "FAIL: save.sh pushed commit"; exit 1; }
+[ -f tools/other.md ] || { echo "FAIL: save.sh rebased onto upstream"; exit 1; }
+[ "$(git status --porcelain tools/rtk.md tools/old.md)" = "$(printf ' M tools/rtk.md\n?? tools/old.md')" ] || { echo "FAIL: save.sh kept other edits"; exit 1; }
+sh "$save" noop tools/saved.md | grep -q 'nothing changed' || { echo "FAIL: save.sh with no change"; exit 1; }
+note tools/bad.md '[]' 'see [gone](gone.md)'
+! sh "$save" bad tools/bad.md 2>/dev/null || { echo "FAIL: save.sh pushed past the hook"; exit 1; }
+[ "$(git --git-dir="$HOME/remote.git" log -1 --format=%s)" = 'tk: add saved (abcdefgh)' ] || { echo "FAIL: save.sh pushed a blocked note"; exit 1; }
+git rm -q --cached tools/bad.md && rm tools/bad.md
+
+# The settings merge keeps existing rules and adds each tk rule once.
+if command -v jq >/dev/null; then
+  mkdir -p "$HOME/.claude"
+  printf '{"permissions":{"allow":["Bash(ls)"]},"theme":"dark"}\n' > "$HOME/.claude/settings.json"
+  sh "$setup" >/dev/null && sh "$setup" >/dev/null
+  jq -e '.theme == "dark" and (.permissions.allow | index("Bash(ls)") and index("Edit(~/tk/**)") and length == 14)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: settings merge"; exit 1; }
+fi
 echo ok

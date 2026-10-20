@@ -15,14 +15,25 @@ cat > .git/hooks/pre-commit <<'HOOK'
 # Checks the staged snapshot, not the working tree, so another agent's unstaged
 # half-written note cannot block an unrelated commit.
 cd "$(git rev-parse --show-toplevel)" || exit 1
-# Warns, without blocking, when a note in this commit grows past ~12 KB or holds body
-# lines over 600 characters (table rows excepted), which make line-range reads large.
-git diff --cached --name-only --diff-filter=AM -- '*.md' | while read -r f; do
-  n=$(git show ":$f" | wc -c)
-  [ "$n" -le 12000 ] || echo "tk: warning: $f is $((n / 1000)) KB, move the section you edited into its own note (tribal-knowledge skill)" >&2
-  long=$(git show ":$f" | awk 'NR > 5 && !/^[ \t]*[|]/ && length($0) > 600 { n++; if (length($0) > m) { m = length($0); l = NR } } END { if (n) print n " lines over 600 characters (longest " m " at line " l ")" }')
-  [ -z "$long" ] || echo "tk: warning: $f has $long, break them into one fact per bullet (tribal-knowledge skill)" >&2
-done
+# Blocks only what this commit adds past the size limits, so a note already over them still
+# takes votes and fixes: a body line over 600 characters (table rows excepted), a body grown
+# past 12 KB, and a changed keywords line over 30 entries or index line over 300 characters.
+grown=$(git diff --cached --name-only --diff-filter=AM -- '*.md' | while read -r f; do
+  new=$(git show ":$f" | tail -n +6 | wc -c)
+  old=$(git show "HEAD:$f" 2>/dev/null | tail -n +6 | wc -c)
+  [ "$new" -le 12000 ] || [ "$new" -le "$old" ] || echo "$f: body grew to $((new / 1000)) KB, past 12 KB, move the section you edited into its own note"
+  git diff --cached -U0 -- "$f" | awk -v f="$f" '
+    /^@@/ { split($3, a, ","); n = substr(a[1], 2) - 1; h = 1; next }
+    h && /^\+/ { n++; s = substr($0, 2)
+      if (n > 5 && s !~ /^[ \t]*[|]/ && length(s) > 600) print f ": line " n " is " length(s) " characters, break it into one fact per bullet" }'
+  for i in 2 3; do
+    l=$(git show ":$f" | sed -n "${i}p")
+    [ "$l" = "$(git show "HEAD:$f" 2>/dev/null | sed -n "${i}p")" ] && continue
+    printf '%s\n' "$l" | awk -v f="$f" '
+      /^keywords:/ && (n = split($0, k, ", ")) > 30 { print f ": keywords holds " n " entries, keep the 30 most searched" }
+      /^index:/ && length($0) > 300 { print f ": index is " length($0) " characters, keep it under 300" }'
+  done
+done)
 snap=$(mktemp -d) || exit 1
 trap 'rm -rf "$snap"' EXIT
 git checkout-index -a --prefix="$snap/" || exit 1
@@ -30,6 +41,7 @@ cd "$snap" || exit 1
 tab=$(printf '\t')
 
 errors=$(
+  [ -z "$grown" ] || printf '%s\n' "$grown"
   find . -type f -name '*.md' ! -path '*/.*' -empty -exec echo "{}: empty note" \;
   find . -type f -name '*.md' ! -path '*/.*' -exec awk '
     function bad(msg) { print FILENAME ": " msg }
@@ -78,5 +90,21 @@ chmod +x .git/hooks/pre-commit
 # ponytail: a hooksPath (often global) makes git skip .git/hooks, warn instead of overriding it
 if hp=$(git config core.hooksPath); then
   echo "warning: core.hooksPath is $hp, so git will not run $TK/.git/hooks/pre-commit" >&2
+fi
+
+# Lets Claude Code read, edit and save notes without a prompt or an auto mode denial.
+# Scoped to ~/tk and the skill's own scripts.
+s="$HOME/.claude/settings.json"
+if [ -d "$HOME/.claude" ] && command -v jq >/dev/null; then
+  [ -s "$s" ] || echo '{}' > "$s"
+  jq --arg h "$HOME" '
+    (["Read(~/tk/**)", "Edit(~/tk/**)"]
+      + (["add", "commit", "pull", "push", "status", "log", "diff", "show", "mv"] | map("Bash(git -C ~/tk \(.) *)"))
+      + (["~", $h] | map("Bash(sh \(.)/.claude/skills/tribal-knowledge/*)"))) as $r
+    | .permissions.allow = ((.permissions.allow // []) + ($r - (.permissions.allow // [])))
+  ' "$s" > "$s.tmp"
+  # Rewrite in place so the file keeps its mode.
+  cmp -s "$s" "$s.tmp" || { cat "$s.tmp" > "$s"; echo "added ~/tk allow rules to $s"; }
+  rm -f "$s.tmp"
 fi
 echo "tk ready at $TK"

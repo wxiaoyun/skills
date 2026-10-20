@@ -47,10 +47,11 @@ Free-form body. Terse, pitfalls first. See also [kubectl](kubectl.md).
 ```
 
 - Frontmatter is exactly these three single-line fields in this order, so search stays line-based.
-- `keywords`: what someone would search to find this note. Exact identifiers verbatim with case kept (binary, repo, service, table and command names, env vars, error strings). Aliases and plain concepts in lowercase kebab-case. No commas inside a keyword. A generic platform word only when the note is mainly about that platform.
-- `index`: one line telling a reader whether the note has what they need, in the form "when to open it. what it holds."
+- `keywords`: what someone would search to find this note, at most 30. Exact identifiers verbatim with case kept (binary, repo, service, table and command names, env vars, error strings). Aliases and plain concepts in lowercase kebab-case. No commas inside a keyword. A generic platform word only when the note is mainly about that platform.
+- `index`: one line under 300 characters telling a reader whether the note has what they need, in the form "when to open it. what it holds."
 - Back every claim with evidence the next reader can re-check: file path and symbol (cite code as `<repo>:<path>`), command, tool version, or URL.
-- Write one fact per bullet and keep body lines under ~600 characters (tables excepted), so a line-range read or `rg -n -C8` stays small. The pre-commit hook warns past that.
+- Write one fact per bullet and keep body lines under 600 characters (tables excepted), so a line-range read or `rg -n -C8` stays small.
+- The pre-commit hook rejects a commit that adds a line past these limits, or changes `keywords` or `index` to one past them. Lines already over a limit pass until edited.
 - Link related notes with relative markdown links. The pre-commit hook rejects links that do not resolve.
 
 ## Records
@@ -63,23 +64,15 @@ A record captures one investigation or incident and is true for its date only. W
 
 ## Searching
 
-Narrow by keywords, then judge candidates by their `index` and `votes` lines before opening any note:
+Rank notes for your terms, then judge candidates by their `index` and `votes` lines before opening any note:
 
 ```sh
-rg -il '^keywords:.*\b(rtk|proxy)\b' ~/tk | xargs -r rg -H -m2 '^(index|votes):'
+sh <this skill's directory>/find.sh rtk proxy 'connection reset'
 ```
 
-`\b` keeps to whole keywords. When nothing turns up, drop it for a wider net, since substrings also hit snake_case names (`sync` finds `order_sync_worker`). When too much turns up, require a second term by inserting `| xargs -r rg -il '<term>'` before the last `xargs`.
-
-When keywords miss, search full text the same way:
-
-```sh
-rg -il 'connection reset' ~/tk | xargs -r rg -H -m2 '^(index|votes):'
-```
-
-- `rg` prints in walk order, not relevance, so `| head` drops arbitrary notes.
-- Records match too. Add `-g '!*-20[0-9][0-9]-[0-9][0-9]-[0-9][0-9].md'` to skip them.
-- Open a long note at its matching lines (`rg -n -C8 '<term>' <note>`) rather than reading it whole.
+- Each term is a plain string matched in any case. Notes rank by how many terms their `keywords` hold as whole words, then by how many appear anywhere in the note, then by newest vote, so one call covers keyword and full-text search.
+- It prints the top 10 and how many more matched. Pass `-n 30` to see more. Specific identifiers rank better than generic words.
+- Before reading a long note, outline it with `find.sh -o <note>` (each line's number and start), then read only the range you need with `sed -n 'A,Bp' <note>` or `rg -n -C8 '<term>' <note>`.
 
 ## Votes
 
@@ -94,22 +87,22 @@ rg -il 'connection reset' ~/tk | xargs -r rg -H -m2 '^(index|votes):'
 
 - Write as soon as you learn something, not at the end of the task. Before your final answer, make sure every note you relied on got its vote and every finding got recorded.
 - Search first and update an existing note rather than adding a duplicate.
-- When you add to a note, extend its `keywords` and `index` to cover the addition. If `index` no longer fits on one line, split the note.
-- Keep notes under ~12 KB. When an edit takes a note past that, move the section you are editing into its own note in the directory named after this one, with its own `keywords` and `index`, and leave a one-line link in its place.
+- When you add to a note, extend its `keywords` and `index` to cover the addition. If `index` no longer fits in 300 characters, split the note.
+- Keep note bodies under 12 KB. The hook rejects a commit that grows a body past that. Move the section you are editing into its own note in the directory named after this one, with its own `keywords` and `index`, and leave a one-line link in its place.
+- Change notes with your file-edit tool rather than shell redirection, so permission rules scoped to `~/tk` apply.
 - When a search missed a note that turned out relevant, add the missed terms to its `keywords`.
 - If `~/tk` does not exist, ask the user to run the setup script from https://github.com/wxiaoyun/skills.
 
 ## Saving
 
-After each change, commit only the paths you changed, since other sessions edit `~/tk` at the same time and their half-done work sits in the same worktree. If a remote exists, rebase onto it and push. The run id is the first 8 characters of `$CLAUDE_CODE_SESSION_ID`, `$PI_SESSION_ID` or `$CODEX_THREAD_ID`.
+After each change, save only the paths you changed, since other sessions edit `~/tk` at the same time and their half-done work sits in the same checkout:
 
 ```sh
-git -C ~/tk add -- <paths> && git -C ~/tk commit -m 'tk: <what changed> (<run-id>)' -- <paths>
-[ -n "$(git -C ~/tk remote)" ] && git -C ~/tk pull --rebase --autostash && git -C ~/tk push
+sh <this skill's directory>/save.sh '<what changed>' <path>...
 ```
 
-Write the paths out literally, since zsh does not word-split a `$VAR` holding several.
-
-The pre-commit hook checks note format and links. Fix what it reports and retry once. A failed save never blocks your answer.
+- It commits just those paths as `tk: <what changed> (<run-id>)`, then rebases onto the upstream and pushes, retrying when another session pushed first. It exits non-zero and says what is left unpushed when a step fails.
+- Pass every path the change touched, both sides of a `git mv` included. Write the paths out literally, since zsh does not word-split a `$VAR` holding several.
+- The pre-commit hook checks note format, size and links. Fix what it reports and save again once. A failed save never blocks your answer.
 
 If notes changed (votes excluded), end your answer with `tk: +added.md ~changed.md -deleted.md`.
