@@ -5,8 +5,11 @@ set -eu
 vote="$(cd "$(dirname "$0")/../skills/tribal-knowledge" && pwd)/vote.sh"
 find="$(dirname "$vote")/find.sh"
 setup="$(cd "$(dirname "$0")" && pwd)/tk-setup.sh"
-export HOME="$(mktemp -d)" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
-trap 'rm -rf "$HOME"' EXIT
+# A symlinked HOME, as on hosts where /home/<user> points at a data disk.
+real="$(mktemp -d)"
+ln -s "$real" "$real.home"
+export HOME="$real.home" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+trap 'rm -rf "$real" "$real.home"' EXIT
 sh "$setup" >/dev/null
 cd "$HOME/tk"
 hook=.git/hooks/pre-commit
@@ -117,6 +120,6 @@ if command -v jq >/dev/null; then
   mkdir -p "$HOME/.claude"
   printf '{"permissions":{"allow":["Bash(ls)"]},"theme":"dark"}\n' > "$HOME/.claude/settings.json"
   sh "$setup" >/dev/null && sh "$setup" >/dev/null
-  jq -e '.theme == "dark" and (.permissions.allow | index("Bash(ls)") and index("Edit(~/tk/**)") and length == 14)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: settings merge"; exit 1; }
+  jq -e --arg real "$(cd "$HOME/tk" && pwd -P)" '.theme == "dark" and (.permissions.allow | index("Bash(ls)") and index("Edit(~/tk/**)") and index("Edit(/\($real)/**)") and length == 16)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: settings merge"; exit 1; }
 fi
 echo ok

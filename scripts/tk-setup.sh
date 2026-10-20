@@ -93,12 +93,14 @@ if hp=$(git config core.hooksPath); then
 fi
 
 # Lets Claude Code read, edit and save notes without a prompt or an auto mode denial.
-# Scoped to ~/tk and the skill's own scripts.
+# Scoped to ~/tk and the skill's own scripts. Claude Code matches Read and Edit rules
+# against the file's real path, so a symlinked home also needs the resolved path.
 s="$HOME/.claude/settings.json"
 if [ -d "$HOME/.claude" ] && command -v jq >/dev/null; then
   [ -s "$s" ] || echo '{}' > "$s"
-  jq --arg h "$HOME" '
-    (["Read(~/tk/**)", "Edit(~/tk/**)"]
+  jq --arg h "$HOME" --arg real "$(pwd -P)" '
+    ((["Read", "Edit"] | map("\(.)(~/tk/**)"))
+      + (if $real == ($h + "/tk") then [] else ["Read", "Edit"] | map("\(.)(/\($real)/**)") end)
       + (["add", "commit", "pull", "push", "status", "log", "diff", "show", "mv"] | map("Bash(git -C ~/tk \(.) *)"))
       + (["~", $h] | map("Bash(sh \(.)/.claude/skills/tribal-knowledge/*)"))) as $r
     | .permissions.allow = ((.permissions.allow // []) + ($r - (.permissions.allow // [])))
