@@ -76,7 +76,7 @@ sh <this skill's directory>/find.sh rtk proxy 'connection reset'
 
 ## Votes
 
-`votes` keeps the 5 most recent verdicts, newest first. `+YYYY-MM-DD` confirms and `-YYYY-MM-DD` contradicts. Before relying on a claim, re-check its evidence and vote on the result, at most once per note per session. Vote with `sh <this skill's directory>/vote.sh <note> +` (or `-`), which prepends today's vote and keeps the newest 5.
+`votes` keeps the 5 most recent verdicts, one per date, newest first. `+YYYY-MM-DD` confirms and `-YYYY-MM-DD` contradicts. Before relying on a claim, re-check its evidence and vote on the result, at most once per note per session. Vote with `sh <this skill's directory>/vote.sh <note> +` (or `-`), which prepends today's vote, drops any older vote of the same date, and keeps the newest 5.
 
 - The evidence holds: vote `+`.
 - The note is wrong and you know the truth: fix it, drop any related `DISPUTED` line, and reset votes to `[+today]`.

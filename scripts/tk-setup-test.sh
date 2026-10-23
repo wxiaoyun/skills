@@ -37,6 +37,10 @@ sh "$vote" tools/rtk.md - >/dev/null
 pass "vote.sh on a full list"
 sh "$vote" tools/kubectl.md + >/dev/null
 [ "$(sed -n 4p tools/kubectl.md)" = "votes: [+$(date +%F)]" ] || { echo "FAIL: vote.sh on an empty list"; exit 1; }
+note tools/rtk.md "[-$(date +%F), +2026-10-03, +2026-10-03, +2026-10-02, +2026-10-01]"
+sh "$vote" tools/rtk.md + >/dev/null
+[ "$(sed -n 4p tools/rtk.md)" = "votes: [+$(date +%F), +2026-10-03, +2026-10-02, +2026-10-01]" ] || { echo "FAIL: vote.sh keeps one vote per date"; exit 1; }
+pass "vote.sh keeps one vote per date"
 note tools/rtk.md '[+2026-10-03]'
 printf -- '---\nkeywords: [k]\n' > tools/short.md
 reject "truncated frontmatter"
