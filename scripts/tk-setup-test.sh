@@ -109,14 +109,14 @@ git clone -q "$HOME/remote.git" "$HOME/other"
 printf -- '---\nkeywords: [o]\nindex: o\nvotes: []\n---\nbody\n' > "$HOME/other/tools/other.md"
 git -C "$HOME/other" add -A && git -C "$HOME/other" commit -qm other && git -C "$HOME/other" push -q 2>/dev/null
 note tools/saved.md '[]'
-CLAUDE_CODE_SESSION_ID=abcdefgh123 sh "$save" 'add saved' tools/saved.md >/dev/null || { echo "FAIL: save.sh"; exit 1; }
-[ "$(git --git-dir="$HOME/remote.git" log -1 --format=%s)" = 'tk: add saved (abcdefgh)' ] || { echo "FAIL: save.sh pushed commit"; exit 1; }
+sh "$save" 'add saved' tools/saved.md >/dev/null || { echo "FAIL: save.sh"; exit 1; }
+[ "$(git --git-dir="$HOME/remote.git" log -1 --format=%s)" = 'tk: add saved' ] || { echo "FAIL: save.sh pushed commit"; exit 1; }
 [ -f tools/other.md ] || { echo "FAIL: save.sh rebased onto upstream"; exit 1; }
 [ "$(git status --porcelain tools/rtk.md tools/old.md)" = "$(printf ' M tools/rtk.md\n?? tools/old.md')" ] || { echo "FAIL: save.sh kept other edits"; exit 1; }
 sh "$save" noop tools/saved.md | grep -q 'nothing changed' || { echo "FAIL: save.sh with no change"; exit 1; }
 note tools/bad.md '[]' 'see [gone](gone.md)'
 ! sh "$save" bad tools/bad.md 2>/dev/null || { echo "FAIL: save.sh pushed past the hook"; exit 1; }
-[ "$(git --git-dir="$HOME/remote.git" log -1 --format=%s)" = 'tk: add saved (abcdefgh)' ] || { echo "FAIL: save.sh pushed a blocked note"; exit 1; }
+[ "$(git --git-dir="$HOME/remote.git" log -1 --format=%s)" = 'tk: add saved' ] || { echo "FAIL: save.sh pushed a blocked note"; exit 1; }
 git rm -q --cached tools/bad.md && rm tools/bad.md
 
 # The settings merge keeps existing rules and adds each tk rule once.

@@ -101,7 +101,7 @@ After each change, save only the paths you changed, since other sessions edit `~
 sh <this skill's directory>/save.sh '<what changed>' <path>...
 ```
 
-- It commits just those paths as `tk: <what changed> (<run-id>)`, then rebases onto the upstream and pushes, retrying when another session pushed first. It exits non-zero and says what is left unpushed when a step fails.
+- It commits just those paths as `tk: <what changed>`, then rebases onto the upstream and pushes, retrying when another session pushed first. It exits non-zero and says what is left unpushed when a step fails.
 - Pass every path the change touched, both sides of a `git mv` included. Write the paths out literally, since zsh does not word-split a `$VAR` holding several.
 - The pre-commit hook checks note format, size and links. Fix what it reports and save again once. A failed save never blocks your answer.
 
