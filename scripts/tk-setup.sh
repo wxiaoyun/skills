@@ -75,7 +75,7 @@ errors=$(
       }
     }
   ' {} + | while IFS="$tab" read -r f t; do
-    case $t in /*) p=$t ;; *) p=${f%/*}/$t ;; esac
+    case $t in (/*) p=$t ;; (*) p=${f%/*}/$t ;; esac
     [ -e "$p" ] || echo "$f: broken link $t"
   done
 )
