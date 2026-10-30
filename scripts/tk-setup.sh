@@ -17,7 +17,7 @@ cat > .git/hooks/pre-commit <<'HOOK'
 cd "$(git rev-parse --show-toplevel)" || exit 1
 # Blocks only what this commit adds past the size limits, so a note already over them still
 # takes votes and fixes: a body line over 600 characters (table rows excepted), a body grown
-# past 12 KB, and a changed keywords line over 30 entries or index line over 300 characters.
+# past 12 KB, and a changed keywords line over 30 entries or index over 300 characters.
 grown=$(git diff --cached --name-only --diff-filter=AM -- '*.md' | while read -r f; do
   new=$(git show ":$f" | tail -n +6 | wc -c)
   old=$(git show "HEAD:$f" 2>/dev/null | tail -n +6 | wc -c)
@@ -31,7 +31,7 @@ grown=$(git diff --cached --name-only --diff-filter=AM -- '*.md' | while read -r
     [ "$l" = "$(git show "HEAD:$f" 2>/dev/null | sed -n "${i}p")" ] && continue
     printf '%s\n' "$l" | awk -v f="$f" '
       /^keywords:/ && (n = split($0, k, ", ")) > 30 { print f ": keywords holds " n " entries, keep the 30 most searched" }
-      /^index:/ && length($0) > 300 { print f ": index is " length($0) " characters, keep it under 300" }'
+      /^index: / && length($0) - 7 > 300 { print f ": index is " length($0) - 7 " characters after \"index: \", keep it under 300" }'
   done
 done)
 snap=$(mktemp -d) || exit 1
@@ -95,18 +95,33 @@ fi
 # Lets Claude Code read, edit and save notes without a prompt or an auto mode denial.
 # Scoped to ~/tk and the skill's own scripts. Claude Code matches Read and Edit rules
 # against the file's real path, so a symlinked home also needs the resolved path.
+# Also hooks the skill's guard.sh: on Bash, to block shell writes to notes and git commands that
+# discard other sessions' edits, and on Stop and SubagentStop, to catch notes edited but never saved.
 s="$HOME/.claude/settings.json"
 if [ -d "$HOME/.claude" ] && command -v jq >/dev/null; then
   [ -s "$s" ] || echo '{}' > "$s"
-  jq --arg h "$HOME" --arg real "$(pwd -P)" '
+  guard='sh ~/.claude/skills/tribal-knowledge/guard.sh'
+  jq --arg h "$HOME" --arg real "$(pwd -P)" --arg pre "$guard" --arg stop "$guard stop" '
     ((["Read", "Edit"] | map("\(.)(~/tk/**)"))
       + (if $real == ($h + "/tk") then [] else ["Read", "Edit"] | map("\(.)(/\($real)/**)") end)
       + (["add", "commit", "pull", "push", "status", "log", "diff", "show", "mv"] | map("Bash(git -C ~/tk \(.) *)"))
       + (["~", $h] | map("Bash(sh \(.)/.claude/skills/tribal-knowledge/*)"))) as $r
     | .permissions.allow = ((.permissions.allow // []) + ($r - (.permissions.allow // [])))
+    | def hook($event; $cmd; $entry): .hooks[$event] = ([(.hooks[$event] // [])[] | select(any(.hooks[]?; .command == $cmd) | not)] + [$entry]);
+      hook("PreToolUse"; $pre; {matcher: "Bash", hooks: [{type: "command", command: $pre}]})
+    | hook("Stop"; $stop; {hooks: [{type: "command", command: $stop}]})
+    | hook("SubagentStop"; $stop; {hooks: [{type: "command", command: $stop}]})
   ' "$s" > "$s.tmp"
   # Rewrite in place so the file keeps its mode.
-  cmp -s "$s" "$s.tmp" || { cat "$s.tmp" > "$s"; echo "added ~/tk allow rules to $s"; }
+  cmp -s "$s" "$s.tmp" || { cat "$s.tmp" > "$s"; echo "added ~/tk allow rules and hooks to $s"; }
   rm -f "$s.tmp"
 fi
+
+# pi loads every extension in its agent dir, so the bots it runs get the same guard.
+for d in "$HOME/.agents/skills/tribal-knowledge" "$HOME/.claude/skills/tribal-knowledge"; do
+  [ -d "$HOME/.pi/agent" ] && [ -f "$d/tk-guard.ts" ] || continue
+  mkdir -p "$HOME/.pi/agent/extensions"
+  ln -sfn "$d/tk-guard.ts" "$HOME/.pi/agent/extensions/tk-guard.ts"
+  break
+done
 echo "tk ready at $TK"

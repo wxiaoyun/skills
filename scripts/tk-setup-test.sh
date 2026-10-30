@@ -41,6 +41,12 @@ note tools/rtk.md "[-$(date +%F), +2026-10-03, +2026-10-03, +2026-10-02, +2026-1
 sh "$vote" tools/rtk.md + >/dev/null
 [ "$(sed -n 4p tools/rtk.md)" = "votes: [+$(date +%F), +2026-10-03, +2026-10-02, +2026-10-01]" ] || { echo "FAIL: vote.sh keeps one vote per date"; exit 1; }
 pass "vote.sh keeps one vote per date"
+(cd / && sh "$vote" tools/kubectl.md - >/dev/null) || { echo "FAIL: vote.sh takes a path inside ~/tk"; exit 1; }
+note tools/disputed.md '[+2026-10-01]' "$(printf -- '- claim\n> DISPUTED 2026-10-02: no evidence')"
+! sh "$vote" tools/disputed.md + 2>/dev/null || { echo "FAIL: vote.sh + on a DISPUTED note"; exit 1; }
+sh "$vote" tools/disputed.md reset >/dev/null
+[ "$(sed -n 4p tools/disputed.md)" = "votes: [+$(date +%F)]" ] || { echo "FAIL: vote.sh reset"; exit 1; }
+rm tools/disputed.md
 note tools/rtk.md '[+2026-10-03]'
 printf -- '---\nkeywords: [k]\n' > tools/short.md
 reject "truncated frontmatter"
@@ -88,6 +94,8 @@ pass "long table row"
 printf -- '---\nkeywords: [%s]\nindex: i\nvotes: []\n---\nbody\n' "$(seq -s ', ' 31)" > tools/kw.md
 reject "31 keywords"
 printf -- '---\nkeywords: [k]\nindex: %s\nvotes: []\n---\nbody\n' "$(printf '%300s' | tr ' ' x)" > tools/kw.md
+pass "index of 300 characters, the prefix not counted"
+printf -- '---\nkeywords: [k]\nindex: %s\nvotes: []\n---\nbody\n' "$(printf '%301s' | tr ' ' x)" > tools/kw.md
 reject "index over 300 characters"
 git commit -qm kw --no-verify
 printf -- 'more\n' >> tools/kw.md
@@ -115,15 +123,51 @@ sh "$save" 'add saved' tools/saved.md >/dev/null || { echo "FAIL: save.sh"; exit
 [ "$(git status --porcelain tools/rtk.md tools/old.md)" = "$(printf ' M tools/rtk.md\n?? tools/old.md')" ] || { echo "FAIL: save.sh kept other edits"; exit 1; }
 sh "$save" noop tools/saved.md | grep -q 'nothing changed' || { echo "FAIL: save.sh with no change"; exit 1; }
 note tools/bad.md '[]' 'see [gone](gone.md)'
-! sh "$save" bad tools/bad.md 2>/dev/null || { echo "FAIL: save.sh pushed past the hook"; exit 1; }
+out=$(sh "$save" bad tools/bad.md 2>&1) && { echo "FAIL: save.sh pushed past the hook"; exit 1; }
+printf '%s\n' "$out" | tail -1 | grep -q 'broken link gone.md' || { echo "FAIL: a blocked save names the reason last: $out"; exit 1; }
 [ "$(git --git-dir="$HOME/remote.git" log -1 --format=%s)" = 'tk: add saved' ] || { echo "FAIL: save.sh pushed a blocked note"; exit 1; }
 git rm -q --cached tools/bad.md && rm tools/bad.md
+git mv tools/saved.md tools/moved.md
+sh "$save" 'move saved' tools/saved.md tools/moved.md >/dev/null || { echo "FAIL: save.sh after git mv"; exit 1; }
+git --git-dir="$HOME/remote.git" cat-file -e HEAD:tools/moved.md && ! git --git-dir="$HOME/remote.git" cat-file -e HEAD:tools/saved.md 2>/dev/null || { echo "FAIL: save.sh pushed the rename"; exit 1; }
+! sh "$save" typo tools/nope.md 2>/dev/null || { echo "FAIL: save.sh with a missing note"; exit 1; }
+
+# guard.sh: the Claude Code hooks (and, through tk-guard.ts, pi) for the shared checkout.
+if command -v jq >/dev/null; then
+  guard="$(dirname "$vote")/guard.sh"
+  bash_hook() { printf '%s' "$1" | jq -Rs '{tool_input: {command: .}}' | sh "$guard" 2>/dev/null; }
+  for c in 'cd ~/tk && git checkout -- tools/rtk.md' 'git -C ~/tk stash' "git -C \"\$HOME/tk\" reset --hard" \
+    "sed -i 's/a/b/' ~/tk/tools/rtk.md" 'cd ~/tk && printf x >> tools/rtk.md' \
+    "$(printf "cd ~/tk && python3 - <<'EOF'\nopen('tools/rtk.md', 'w').write('x')\nEOF")"; do
+    ! bash_hook "$c" || { echo "FAIL: guard should block: $c"; exit 1; }
+  done
+  for c in "cd ~/tk && sh x/save.sh 'note the git reset trap' tools/rtk.md" 'cd ~/tk && rg -n proxy tools > /tmp/out.md' \
+    'git -C ~/tk status && sh x/vote.sh tools/rtk.md + >/dev/null' 'git checkout main' "sed -i 's/a/b/' src/main.go"; do
+    bash_hook "$c" || { echo "FAIL: guard should allow: $c"; exit 1; }
+  done
+  # Stop blocks once while a note this session edited is unsaved. tools/rtk.md is still modified here.
+  edit() { printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"%s"}}]}}\n' "$1" > "$HOME/t.jsonl"; }
+  stop() { printf '{"transcript_path":"%s/t.jsonl"%s}' "$HOME" "${1:-}" | sh "$guard" stop 2>/dev/null; }
+  edit "$HOME/tk/tools/rtk.md"; ! stop || { echo "FAIL: stop with an unsaved note"; exit 1; }
+  edit "$(cd "$HOME/tk" && pwd -P)/tools/rtk.md"; ! stop || { echo "FAIL: stop with an unsaved note by real path"; exit 1; }
+  stop ',"stop_hook_active":true' || { echo "FAIL: stop blocks only once"; exit 1; }
+  mv "$HOME/t.jsonl" "$HOME/sub.jsonl"; edit "$HOME/tk/tools/moved.md"
+  printf '{"transcript_path":"%s/t.jsonl","agent_transcript_path":"%s/sub.jsonl"}' "$HOME" "$HOME" | sh "$guard" stop 2>/dev/null &&
+    { echo "FAIL: SubagentStop reads the subagent's own transcript"; exit 1; }
+  rm "$HOME/sub.jsonl"
+  edit "$HOME/tk/tools/moved.md"; stop || { echo "FAIL: stop with every note saved"; exit 1; }
+  [ "$(sh "$guard" dirty tools/rtk.md tools/moved.md)" = tools/rtk.md ] || { echo "FAIL: guard.sh dirty"; exit 1; }
+fi
 
 # The settings merge keeps existing rules and adds each tk rule once.
 if command -v jq >/dev/null; then
   mkdir -p "$HOME/.claude"
-  printf '{"permissions":{"allow":["Bash(ls)"]},"theme":"dark"}\n' > "$HOME/.claude/settings.json"
+  printf '{"permissions":{"allow":["Bash(ls)"]},"theme":"dark","hooks":{"PreToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"x"}]}]}}\n' > "$HOME/.claude/settings.json"
+  # An installed skill, so setup links the pi extension.
+  mkdir -p "$HOME/.agents/skills" "$HOME/.pi/agent" && ln -s "$(dirname "$vote")" "$HOME/.agents/skills/tribal-knowledge"
   sh "$setup" >/dev/null && sh "$setup" >/dev/null
   jq -e --arg real "$(cd "$HOME/tk" && pwd -P)" '.theme == "dark" and (.permissions.allow | index("Bash(ls)") and index("Edit(~/tk/**)") and index("Edit(/\($real)/**)") and length == 16)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: settings merge"; exit 1; }
+  jq -e '(.hooks.PreToolUse | length == 2 and .[0].hooks[0].command == "x" and .[1].matcher == "Bash") and (.hooks.Stop | length == 1 and (.[0].hooks[0].command | endswith("guard.sh stop"))) and (.hooks.SubagentStop | length == 1)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: hooks merge"; exit 1; }
+  [ -f "$HOME/.pi/agent/extensions/tk-guard.ts" ] || { echo "FAIL: pi extension link"; exit 1; }
 fi
 echo ok

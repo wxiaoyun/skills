@@ -12,7 +12,7 @@ Install the skill:
 npx skills add wxiaoyun/skills -g --skill tribal-knowledge
 ```
 
-Set up `~/tk` as a git repo with a pre-commit hook that checks note format, size and links. When `~/.claude` and `jq` exist, it also adds Claude Code allow rules scoped to `~/tk` and the skill's scripts. Safe to rerun, and rerunning updates the hook:
+Set up `~/tk` as a git repo with a pre-commit hook that checks note format, size and links. When `~/.claude` and `jq` exist, it also adds Claude Code allow rules scoped to `~/tk` and the skill's scripts, plus the skill's `guard.sh` as a Bash and Stop hook: it blocks shell writes to notes and git commands that discard other sessions' edits in the shared checkout, and catches notes edited but never saved. When `~/.pi/agent` exists, it links `tk-guard.ts` there so pi gets the same guard. Safe to rerun, and rerunning updates the hook:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/wxiaoyun/skills/master/scripts/tk-setup.sh | sh

@@ -10,9 +10,15 @@ msg=$1; shift
 g() { git -C "$HOME/tk" "$@"; }
 fail() { echo "save.sh: $*" >&2; exit 1; }
 
-g add -- "$@" || fail "git add failed, nothing committed"
+# The old side of a `git mv` is gone from disk and index, so git add rejects it. The commit still takes it.
+for p; do
+  if g ls-files -co --error-unmatch -- "$p" >/dev/null 2>&1; then g add -- "$p" || fail "git add $p failed, nothing committed"
+  elif [ -z "$(g ls-tree --name-only HEAD -- "$p")" ]; then fail "no such note $p, nothing committed"; fi
+done
 if g diff --cached --quiet -- "$@"; then echo "save.sh: nothing changed in $*"; exit 0; fi
-g commit -q -m "tk: $msg" -- "$@" || fail "commit blocked, fix what the hook reported and save again"
+# The hook's reasons go into the last line, which is all an agent sees after `| tail -1`.
+out=$(g commit -q -m "tk: $msg" -- "$@" 2>&1) ||
+  fail "commit blocked: $(printf '%s\n' "$out" | grep -v '^tk: commit blocked' | paste -sd ';' -). Fix that and save again"
 head=$(g rev-parse --short HEAD)
 g rev-parse -q --verify '@{u}' >/dev/null || { echo "saved $head locally, no upstream to push to"; exit 0; }
 
