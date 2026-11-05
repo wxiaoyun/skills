@@ -32,6 +32,8 @@ HOT_SHARE = 0.2    # hot = the top 20% of notes by bytes read
 PAIR_MIN = 0.15    # weighted keyword overlap a pair needs. On ~/tk in 2026-11, true duplicates scored about 0.2
 PAIR_TOP = 20
 FRESH = 86400      # notes committed this recently are still in use, so sleep leaves them alone
+CAP = 6000         # the pre-commit hook's body size cap
+OP = re.compile(r'(merge|compress|split) \S')
 
 URL = re.compile(r'https?://[^\s)>`\]]+')
 CODE = re.compile(r'`([^`]+)`')
@@ -53,8 +55,9 @@ def git(*args, cwd=TK, check=True):
     return r
 
 
-def is_record(note):
-    return note.startswith('history/') or '/history/' in note
+def is_record(note, votes):
+    """Records live under history/ and never take votes. One filed elsewhere still has votes: []."""
+    return note.startswith('history/') or '/history/' in note or votes == 'votes: []'
 
 
 def evidence(text):
@@ -97,26 +100,31 @@ def pairs(kws):
 
 
 def frontmatter(path):
-    with open(path, errors='replace') as f:
-        head = [f.readline().rstrip('\n') for _ in range(3)]
+    """Returns (keywords, index, votes line, body bytes) of a note, the body measured as the pre-commit hook does."""
+    with open(path, 'rb') as f:
+        lines = f.read().split(b'\n')
+    head = [x.decode(errors='replace') for x in lines[:4]] + [''] * 4
+    body = len(b'\n'.join(lines[5:]))
     kw = head[1]
     if not (kw.startswith('keywords: [') and kw.endswith(']')):
         log('frontmatter', target=path, error='no keywords line')
-        return set(), ''
-    return {k.strip().lower() for k in kw[11:-1].split(', ') if k.strip()}, head[2][7:]
+        return set(), '', head[3], body
+    return {k.strip().lower() for k in kw[11:-1].split(', ') if k.strip()}, head[2][7:], head[3], body
 
 
 def last_commits():
-    """Maps each path to (unix time, subject) of the newest commit that touched it."""
+    """Returns {path: subject of its newest commit} and {path: unix time of its newest commit not made by sleep}."""
     out = git('log', '--format=\x01%ct %s', '--name-only', cwd=WT).stdout
-    last, cur = {}, None
+    subject, human, cur = {}, {}, None
     for line in out.splitlines():
         if line.startswith('\x01'):
             t, _, s = line[1:].partition(' ')
             cur = (int(t), s)
-        elif line and line not in last:
-            last[line] = cur
-    return last
+        elif line:
+            subject.setdefault(line, cur[1])
+            if not cur[1].startswith('tk: sleep '):
+                human.setdefault(line, cur[0])
+    return subject, human
 
 
 def dirty():
@@ -128,8 +136,10 @@ def dirty():
 
 
 def scope_filter(paths):
-    scope = [p.removeprefix('./').removeprefix('~/tk/').rstrip('/').removesuffix('.md') for p in paths]
-    return lambda n: not scope or any(n == s + '.md' or n.startswith(s + '/') for s in scope)
+    """A path ending in .md matches that note only. Any other path matches the note of that name and its parts."""
+    scope = [p.removeprefix('./').removeprefix('~/tk/').rstrip('/') for p in paths]
+    return lambda n: not scope or any(
+        n == s if s.endswith('.md') else n == s + '.md' or n.startswith(s + '/') for s in scope)
 
 
 def candidates(paths):
@@ -141,36 +151,47 @@ def candidates(paths):
     spec.loader.exec_module(tk_usage)
     log('candidates', target=WT, days=DAYS)
     notes, st, logs = tk_usage.collect(DAYS, WT)
-    notes = {n for n in notes if not is_record(n)}
+    kws, index, body = {}, {}, {}
+    for n in list(notes):
+        kws[n], index[n], votes, body[n] = frontmatter(os.path.join(WT, n))
+        if is_record(n, votes):
+            notes.discard(n)
+    kws = {n: kws[n] for n in notes}
     in_scope = scope_filter(paths)
-    busy, last, now = dirty(), last_commits(), time.time()
-    fresh = {n for n, (t, _) in last.items() if now - t < FRESH}
-    slept = {n for n, (_, s) in last.items() if s.startswith('tk: sleep ')}
+    busy, (subject, human), now = dirty(), last_commits(), time.time()
+    # Only other sessions' commits make a note fresh, so sleep can return to its own work.
+    fresh = {n for n, t in human.items() if now - t < FRESH}
+    slept = {n for n, s in subject.items() if s.startswith('tk: sleep ')}
     usable = lambda n: n not in busy and n not in fresh
+    read = lambda n: st[n]['chars'] / 1e3 if n in st else 0
 
-    kws, index = {}, {}
-    for n in notes:
-        kws[n], index[n] = frontmatter(os.path.join(WT, n))
     # Both notes in scope, so parallel runs on disjoint subtrees never edit the same note.
     merge = [p for p in pairs(kws) if p[0] >= PAIR_MIN and in_scope(p[1]) and in_scope(p[2])
              and usable(p[1]) and usable(p[2])][:PAIR_TOP]
 
     ranked = sorted(((x['chars'], n) for n, x in st.items() if n in notes and x['reads']), reverse=True)
     hot = [(c, n) for c, n in ranked[:math.ceil(HOT_SHARE * len(notes))]
-           if in_scope(n) and usable(n) and n not in slept]
+           if in_scope(n) and usable(n) and (n not in slept or body[n] > CAP)]
 
     print(f'{len(notes)} notes, reads from {len(logs)} session logs over {DAYS} days. Off limits: '
-          f'{len(busy & notes)} with unsaved edits in ~/tk, {len(fresh & notes)} committed in the last 24h.')
+          f'{len(busy & notes)} with unsaved edits in ~/tk, {len(fresh & notes)} committed by sessions in the last 24h.')
     print(f'\nMERGE: {len(merge)} pairs by keyword overlap. Merge only pairs that describe the same thing.')
     for s, a, b in merge:
-        print(f'{s:.2f}  {a}  {b}\n      {a}: {index[a]}\n      {b}: {index[b]}')
-    print(f'\nHOT: {len(hot)} notes to compress and sharpen, unchanged since their last sleep commit are left out.')
-    print(f"{'read_kb':>8} {'size_kb':>8}  note")
+        print(f'{s:.2f}  {a}  {b}')
+        for n in (a, b):
+            print(f'      {n} ({read(n):.0f} KB read, body {body[n] / 1e3:.1f} KB): {index[n]}')
+    print(f'\nHOT: {len(hot)} notes to compress, sharpen and split. A note sleep already did returns while its body '
+          f'is over {CAP // 1000} KB.')
+    print(f"{'read_kb':>8} {'body_kb':>8}  note")
     for c, n in hot:
-        print(f'{c / 1e3:8.0f} {os.path.getsize(os.path.join(WT, n)) / 1e3:8.1f}  {n}')
+        print(f'{c / 1e3:8.0f} {body[n] / 1e3:8.1f}  {n}')
 
 
 def save(what, paths, rm):
+    if not OP.match(what):
+        log('save', target=WT, error=f'bad subject {what!r}')
+        print("Start the subject with merge, compress or split, then the note: 'compress tools/rtk.md, cut timeline'")
+        sys.exit(2)
     old, new = [], []
     for p in paths + rm:
         old.append(git('show', f'HEAD:{p}', cwd=WT, check=False).stdout)
@@ -232,6 +253,7 @@ def end(force):
         print(f'Unsaved edits in the worktree. Save or undo each, or run {ME} end --force to discard them:')
         print(git('status', '--short', cwd=WT, check=False).stdout)
         sys.exit(1)
+    git('branch', '-q', '-D', os.path.basename(WT)[1:], check=False)
     print('removed', WT)
 
 
@@ -247,6 +269,11 @@ def selftest():
     assert [(a, b) for _, a, b in got] == [('a/part.md', 'b.md'), ('a.md', 'b.md')], got
     assert scope_filter(['tools/'])('tools/a.md') and not scope_filter(['tools'])('toolsx/a.md')
     assert scope_filter(['~/tk/tools/rtk.md'])('tools/rtk.md') and scope_filter([])('any.md')
+    assert scope_filter(['tools'])('tools.md') and scope_filter(['tools'])('tools/a/b.md')
+    assert scope_filter(['wallet-ml.md'])('wallet-ml.md') and not scope_filter(['wallet-ml.md'])('wallet-ml/a.md')
+    assert is_record('a/history/x.md', 'votes: [+2026-10-01]') and is_record('tools/triage.md', 'votes: []')
+    assert not is_record('tools/rtk.md', 'votes: [+2026-10-01]')
+    assert OP.match('compress tools/rtk.md, cut') and not OP.match('COMPRESS x') and not OP.match('compress+sharpen x')
     print('ok')
 
 

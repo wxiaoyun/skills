@@ -1,6 +1,6 @@
 ---
 name: sleep
-description: Consolidate ~/tk notes, merging overlapping notes and compressing the most-read ones. Use when the user runs /sleep, optionally with note paths or directories to limit it.
+description: Consolidate ~/tk notes, merging overlapping notes and compressing and splitting the most-read ones. Use when the user runs /sleep, optionally with note paths or directories to limit it.
 disable-model-invocation: true
 ---
 
@@ -13,17 +13,19 @@ Sleep consolidates the notes the `tribal-knowledge` skill writes, the way sleep 
 1. Load the `tribal-knowledge` skill. Its note format and layout rules bind every note you write here.
 2. Run `python3 <dir>/sleep.py start`. If it fails because the worktree exists, stop and report that line: another run is live or a crashed one needs the user. When told to run as a named parallel run, put `--name <name>` before every `sleep.py` command: the worktree is then `~/tk/.sleep-<name>`.
 3. Run `python3 <dir>/sleep.py candidates [path...]`, passing the user's paths if any. It prints MERGE pairs and HOT notes, already filtered to notes nobody is editing.
-4. Split the candidates into batches: group by directory, about 150 KB of note text per batch, and put each MERGE pair whose notes sit in different directories in a batch of its own. Dispatch one subagent per batch. Brief each with the batch, the worktree path, and an instruction to read the Operations section of `<dir>/SKILL.md` and return one line per save. Without a subagent tool, work the batches yourself in order. Done when every batch has reported.
+4. Split the candidates into batches: group by directory, about 150 KB of note text per batch, and put each MERGE pair whose notes sit in different directories in a batch of its own. Work the batches one at a time, since they share the worktree: dispatch a subagent for a batch and wait for its report before the next, or work it yourself. Brief each subagent with the batch, the worktree path, and an instruction to read the Operations section of `<dir>/SKILL.md` and return one line per save. Done when every batch has reported.
 5. Run `python3 <dir>/sleep.py end`. If it lists unsaved edits, save or undo each, then run it again.
 6. Report one line per commit, then any pattern that kept recurring across notes (for example agents writing event timelines), phrased as a fix for the user's next retro.
 
 ## Operations
 
-Edit notes only under the run's worktree, with your file-edit tool. Save each operation on its own:
+Edit notes only under the run's worktree, with your file-edit tool (the tk guard blocks shell writes to notes). Save each operation on its own, the subject starting with its operation and note:
 
 ```sh
-python3 <dir>/sleep.py [--name <name>] save '<op> <note>, <reason>' <note>... [--rm <note>]
+python3 <dir>/sleep.py [--name <name>] save '<merge|compress|split> <note>, <reason>' <note>... [--rm <note>]
 ```
+
+Every note you write passes the pre-commit hook: at most 30 `keywords`, an `index` under 300 characters, body lines under 600 characters (tables excepted), and a body under 6 KB unless the save shrinks it.
 
 - A save that prints `Dropped` lost a race with another session. Move on to the next operation.
 - A save that lists lost evidence means a citation, `DISPUTED` line or `Hypothesis (unverified)` line went missing. Put each back beside its claim and save again.
@@ -31,9 +33,9 @@ python3 <dir>/sleep.py [--name <name>] save '<op> <note>, <reason>' <note>... [-
 - Any other failed save: stop, run `sleep.py end --force`, and report the failing save.
 
 **Merge** a MERGE pair only when both notes describe the same thing. Judge by the two index lines first and open the bodies only when they look like one subject.
-- The survivor is the note with more reads (higher `read_kb`, else the larger note). Fold the other's facts into it, rewrite its `keywords` (union, at most 30) and `index`, and keep the 5 newest votes from both, one per date.
-- Repoint every link to the removed note (`rg -l '<name>.md' ~/tk/.sleep`) to the survivor, and pass those notes in the same save with `--rm <removed note>`.
-- Keep the survivor under 6 KB by compressing it in the same operation. If it still cannot fit, leave the pair.
+- The survivor is the note with more reads (higher `KB read`, else the larger body). Fold the other's facts into it, rewrite its `keywords` (union, at most 30) and `index`, and keep the 5 newest votes from both, one per date.
+- Repoint every link to the removed note (`rg -l '<name>.md' <worktree>`) to the survivor, and pass those notes in the same save with `--rm <removed note>`.
+- A survivor over 6 KB gets compressed and split right after, in their own saves.
 
 **Compress** each HOT note to its live facts.
 - Keep every evidence citation, `DISPUTED` line and `Hypothesis (unverified)` line beside its claim.
@@ -42,4 +44,9 @@ python3 <dir>/sleep.py [--name <name>] save '<op> <note>, <reason>' <note>... [-
 
 **Sharpen** each HOT note's frontmatter in the same save as its compress: `keywords` lead with the exact identifiers a searcher would type, and `index` reads "when to open it. what it holds."
 
-Sleep leaves votes as they are and leaves `history/` records alone, since it re-checks no evidence and records are true for their date only.
+**Split** a note whose body is still over 6 KB after compress, following the tribal-knowledge layout: move whole sections into child notes in the directory named after it (`tools/herdr.md` into `tools/herdr/<section>.md`) until the parent body fits.
+- Each child gets its own `keywords` and `index` for the section it holds, and the parent's `votes`, since the moved text carries the same evidence.
+- Leave a one-line link to each child where its section was, and trim the parent's `keywords` and `index` to what it still holds.
+- Save the parent and its children together.
+
+Sleep leaves votes as they are and leaves records alone (notes under `history/` or with `votes: []`), since it re-checks no evidence and records are true for their date only.

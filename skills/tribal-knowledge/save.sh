@@ -26,10 +26,12 @@ g rev-parse -q --verify '@{u}' >/dev/null || { echo "saved $head locally, no ups
 # Rebase onto the fetched upstream ref, not FETCH_HEAD, which concurrent fetches overwrite.
 # ponytail: --autostash pops other sessions' edits back after the rebase; if upstream changed
 # the same file, git keeps their edit in the stash and says so.
+# A push that loses a race prints scary rejections, so its output shows only when every try failed.
+out=''
 for try in 1 2 3; do
   g fetch -q || { sleep 1; continue; }
   g rebase -q --autostash '@{u}' || { g rebase --abort 2>/dev/null; fail "rebase onto upstream failed, $head is committed locally but not pushed"; }
-  g push -q && { echo "saved $(g rev-parse --short HEAD), pushed"; exit 0; }
+  out=$(g push -q 2>&1) && { echo "saved $(g rev-parse --short HEAD), pushed"; exit 0; }
   sleep 1
 done
-fail "push failed 3 times, $(g rev-parse --short HEAD) is committed locally but not pushed"
+fail "push failed 3 times, $(g rev-parse --short HEAD) is committed locally but not pushed: $(printf '%s\n' "$out" | tail -1)"

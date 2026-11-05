@@ -34,7 +34,7 @@ Required: agents load skills by matching descriptions, which often misses. Add t
 
 ## sleep
 
-Consolidates `~/tk`: merges notes that overlap, and compresses and sharpens the most-read ones. Run `/sleep` (optionally with note paths or directories) by hand or from your own cron. It works in a private worktree at `~/tk/.sleep` and pushes one commit per operation to `~/tk`'s upstream, so it needs a git remote. A save that drops any evidence citation is refused. Deferred operations and the success metric are in [docs/sleep-v1.md](docs/sleep-v1.md).
+Consolidates `~/tk`: merges notes that overlap, and compresses, sharpens and splits the most-read ones. Run `/sleep` (optionally with note paths or directories) by hand or from your own cron. It works in a private worktree at `~/tk/.sleep` and pushes one commit per operation to `~/tk`'s upstream, so it needs a git remote. A save that drops any evidence citation is refused. Deferred operations and the success metric are in [docs/sleep-v1.md](docs/sleep-v1.md).
 
 ```sh
 npx skills add wxiaoyun/skills -g --skill sleep

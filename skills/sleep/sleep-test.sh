@@ -44,4 +44,5 @@ echo "$out" | grep -q '^Dropped' || fail "conflict not dropped: $out"
 python3 "$py" end >/dev/null 2>&1 || fail "end"
 python3 "$py" --name x end >/dev/null 2>&1 || fail "parallel end"
 [ ! -e "$wt" ] && [ ! -e "$wx" ] || fail "worktree left behind"
+[ -z "$(git branch --list 'sleep*')" ] || fail "sleep branch left behind"
 echo ok

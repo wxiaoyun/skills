@@ -1,6 +1,6 @@
 # Sleep v1
 
-Sleep v0 (`skills/sleep/`) merges overlapping notes and compresses and sharpens the most-read ones. This document records the rest of the design agreed on 2026-11-05, held back until v0 shows it moves the metric below. Terms follow [GLOSSARY.md](../GLOSSARY.md).
+Sleep v0 (`skills/sleep/`) merges overlapping notes and compresses, sharpens and splits the most-read ones. This document records the rest of the design agreed on 2026-11-05, held back until v0 shows it moves the metric below. Terms follow [GLOSSARY.md](../GLOSSARY.md).
 
 ## Why v0 came first
 
@@ -27,17 +27,23 @@ Bytes of note text read per session that reads `~/tk`, from `python3 skills/slee
 
 Re-measure after two weeks of nightly runs. v1 is worth building only if v0 brought this down.
 
+## First run, 2026-11-05
+
+Six parallel runs over disjoint subtrees made 95 commits. The notes they touched went from 925 KB to 827 KB (-11%). No merge pair was merged.
+
+- Only the run that split notes into child notes cut deeply (-23% on the notes read, against -4% to -14% for compress alone), so split moved from the deferred list into v0.
+- Keyword overlap mostly finds related notes, not duplicates. The three true duplicates found would have merged into 13 to 19 KB notes, which needed split to fit.
+- Every run saw writers put dated timelines, per-date result tables, run ids and verdict lines into topic notes. That is a fix to the tribal-knowledge writing rules, for a retro.
+
 ## Deferred operations
 
 **Forget**: remove a note from the live set with `git rm`, git history being the archive. A note is forgotten when it had no reads in 45 days and its newest vote is older than 45 days, or when it has held an open `DISPUTED` line for more than 45 days. A note other notes link to is merged into the linking note instead.
 
 **Distill**: once a record is 45 days old, lift its lasting facts into regular notes and forget the record in the same commit. No marker is needed, since a record is processed once. Open question raised during the v0 review: records exist only because the user asked for them, so forgetting them may undo the user's intent. Decide before building whether distill also forgets.
 
-**Split**: split a hot note past 8 KB. The 6 KB cap may make this redundant.
-
 **Strengthen by co-reads**: link notes that sessions often read together. Needs new log parsing, and was left out from the start.
 
-Order within one run: forget, distill, merge, compress, strengthen. Cheap removals go first so later stages read less.
+Order within one run: forget, distill, merge, compress and strengthen, split. Cheap removals go first so later stages read less.
 
 ## Known limits
 
