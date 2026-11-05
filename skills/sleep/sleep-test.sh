@@ -41,7 +41,11 @@ echo "$out" | grep -q '^Dropped' || fail "conflict not dropped: $out"
   fail "dropped operation left the worktree off upstream"
 [ -z "$(git status --porcelain)" ] || fail "parallel worktree shows up in ~/tk status"
 
+# A commit a failed save left behind gets pushed by end, not deleted with the branch.
+note "$wt/a.md" 'Third: `repo:src/a.go` and `repo:src/b.go`.'
+git -C "$wt" commit -qam 'tk: sleep compress a.md, left unpushed'
 python3 "$py" end >/dev/null 2>&1 || fail "end"
+[ "$(git -C "$HOME/up.git" log -1 --format=%s)" = 'tk: sleep compress a.md, left unpushed' ] || fail "end lost an unpushed commit"
 python3 "$py" --name x end >/dev/null 2>&1 || fail "parallel end"
 [ ! -e "$wt" ] && [ ! -e "$wx" ] || fail "worktree left behind"
 [ -z "$(git branch --list 'sleep*')" ] || fail "sleep branch left behind"

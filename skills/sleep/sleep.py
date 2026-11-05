@@ -37,8 +37,10 @@ OP = re.compile(r'(merge|compress|split) \S')
 
 URL = re.compile(r'https?://[^\s)>`\]]+')
 CODE = re.compile(r'`([^`]+)`')
-# A code span citing a file: repo:path, a path with an extension, or a command ending in one.
-CITE = re.compile(r'^[\w.-]+:[\w.-]*[/.][\w./-]*|^[\w.-]+/[\w./-]+\.\w+|\s[\w./-]+/[\w.-]+\.\w+$')
+# A code span citing evidence: repo:path, a path or file name with an extension (and maybe :line),
+# a command ending in a path, or any command with a flag, whose arguments are facts too.
+CITE = re.compile(r'^[\w.-]+:[\w.-]*[/.][\w./-]*|^[\w.-]+/[\w./-]+\.\w+|\s[\w./-]+/[\w.-]+\.\w+$'
+                  r'|^[\w.-]+\.[a-z]{1,5}(:\d+)?$|^[\w./-]+ .*\s--?[a-zA-Z]')
 DISPUTED = re.compile(r'DISPUTED \d{4}-\d\d-\d\d')
 HYPOTHESIS = 'Hypothesis (unverified)'
 
@@ -184,7 +186,7 @@ def candidates(paths):
           f'is over {CAP // 1000} KB.')
     print(f"{'read_kb':>8} {'body_kb':>8}  note")
     for c, n in hot:
-        print(f'{c / 1e3:8.0f} {body[n] / 1e3:8.1f}  {n}')
+        print(f'{c / 1e3:8.0f} {body[n] / 1e3:8.1f}  {n}' + ('  (compressed before, split only)' if n in slept else ''))
 
 
 def save(what, paths, rm):
@@ -192,6 +194,12 @@ def save(what, paths, rm):
         log('save', target=WT, error=f'bad subject {what!r}')
         print("Start the subject with merge, compress or split, then the note: 'compress tools/rtk.md, cut timeline'")
         sys.exit(2)
+    if what.startswith('split '):
+        parent = what.split()[1].rstrip(',')
+        if os.path.exists(os.path.join(WT, parent)) and frontmatter(os.path.join(WT, parent))[3] > CAP:
+            log('save', target=parent, error='split leaves parent over cap')
+            print(f'{parent} is still over {CAP} bytes after this split. Move another section out and save again.')
+            sys.exit(1)
     old, new = [], []
     for p in paths + rm:
         old.append(git('show', f'HEAD:{p}', cwd=WT, check=False).stdout)
@@ -243,10 +251,32 @@ def start():
     print(WT)
 
 
+def push_left():
+    """Pushes commits a failed save left on the branch. Returns True once nothing is left unpushed."""
+    for i in range(5):
+        git('fetch', '-q', cwd=WT, check=False)
+        if git('rev-list', '--count', '@{u}..HEAD', cwd=WT).stdout.strip() == '0':
+            return True
+        log('push_left', target=WT, attempt=i + 1)
+        if git('rebase', '-q', '--autostash', '@{u}', cwd=WT, check=False).returncode:
+            git('rebase', '--abort', cwd=WT, check=False)
+            return False
+        if git('-c', 'push.default=upstream', 'push', '-q', cwd=WT, check=False).returncode == 0:
+            return True
+        time.sleep(i + 1)
+    return False
+
+
 def end(force):
     if not os.path.exists(WT):
         print('no sleep worktree')
         return
+    # Removing the worktree deletes its branch, so unpushed commits must reach upstream first, even with --force.
+    if not push_left():
+        log('end', target=WT, error='commits still unpushed, worktree kept')
+        print('These commits did not reach upstream, so the worktree stays. Report them to the user:')
+        print(git('log', '--oneline', '@{u}..HEAD', cwd=WT, check=False).stdout)
+        sys.exit(1)
     r = git('worktree', 'remove', *(['--force'] if force else []), WT, check=False)
     if r.returncode:
         log('end', target=WT, status=r.returncode, error=repr(r.stderr.strip()[-300:]))
@@ -263,6 +293,8 @@ def selftest():
     assert toks == {'wallet-ml:src/a.go', 'https://x.y/z', 'rg -n foo src/b.py', 'DISPUTED 2026-10-01'}, toks
     assert hyp == 1
     assert evidence('```sh\nrg x\n```\n`repo:\n  a/b.go`')[0] == {'repo: a/b.go'}
+    toks = evidence('`main.py`, `pltv.rs:88`, `bytedcli libra get --app-id 1180`, `1.2.3`, `a.dws_wallet_eval_di`')[0]
+    assert toks == {'main.py', 'pltv.rs:88', 'bytedcli libra get --app-id 1180'}, toks
     kws = {'a.md': {'rtk', 'proxy', 'x'}, 'b.md': {'rtk', 'proxy', 'y'}, 'a/part.md': {'rtk', 'proxy', 'x'},
            'c.md': {'z'}, 'd.md': {'w'}}
     got = pairs(kws)
