@@ -35,7 +35,7 @@ Every note you write passes the pre-commit hook: at most 30 `keywords`, an `inde
 **Merge** a MERGE pair only when both notes describe the same thing. Judge by the two index lines first and open the bodies only when they look like one subject.
 - The survivor is the note with more reads (higher `KB read`, else the larger body). Fold the other's facts into it, rewrite its `keywords` (union, at most 30) and `index`, and keep the 5 newest votes from both, one per date.
 - Repoint every link to the removed note (`rg -l '<name>.md' <worktree>`) to the survivor, and pass those notes in the same save with `--rm <removed note>`.
-- A survivor over 6 KB gets compressed and split right after, in their own saves.
+- The hook blocks a survivor that grows past 6 KB, so compress and split it inside the merge save when it would.
 
 **Compress** each HOT note to its live facts. A HOT note marked `split only` was compressed by an earlier run, so go straight to Split.
 - Keep every evidence citation, `DISPUTED` line and `Hypothesis (unverified)` line beside its claim.
@@ -45,6 +45,7 @@ Every note you write passes the pre-commit hook: at most 30 `keywords`, an `inde
 **Sharpen** each HOT note's frontmatter in the same save as its compress: `keywords` lead with the exact identifiers a searcher would type, and `index` reads "when to open it. what it holds."
 
 **Split** a note whose body is still over 6 KB after compress, following the tribal-knowledge layout: move whole sections into child notes in the directory named after it (`tools/herdr.md` into `tools/herdr/<section>.md`) until the parent body fits.
+- Move lasting facts only: a section telling one dated event belongs to compress, which cuts it.
 - Each child gets its own `keywords` and `index` for the section it holds, and the parent's `votes`, since the moved text carries the same evidence.
 - Leave a one-line link to each child where its section was, and trim the parent's `keywords` and `index` to what it still holds.
 - Save the parent and its children together.
