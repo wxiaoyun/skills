@@ -214,7 +214,8 @@ def save(what, paths, rm):
         print('\n'.join('  ' + t for t in lost) or f'  {old_h - new_h} "{HYPOTHESIS}" lines')
         sys.exit(1)
     for p in rm:
-        git('rm', '-q', '--', p, cwd=WT)
+        # A retry after the hook blocked the commit finds the note already removed.
+        git('rm', '-q', '--ignore-unmatch', '--', p, cwd=WT)
     log('save', target=WT, paths=len(paths + rm), what=repr(what))
     env = dict(os.environ, TK=WT, GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='push.default', GIT_CONFIG_VALUE_0='upstream')
     r = subprocess.run(['sh', SAVE, 'sleep ' + what, *paths, *rm], env=env, capture_output=True, text=True)
