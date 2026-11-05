@@ -35,6 +35,13 @@ Six parallel runs over disjoint subtrees made 95 commits. The notes they touched
 - Keyword overlap mostly finds related notes, not duplicates. The three true duplicates found would have merged into 13 to 19 KB notes, which needed split to fit.
 - Every run saw writers put dated timelines, per-date result tables, run ids and verdict lines into topic notes. That is a fix to the tribal-knowledge writing rules, for a retro.
 
+## Second run, 2026-11-05, with split
+
+Six parallel runs made 149 commits, one of them a merge. The 69 parent notes they touched went from 693 KB to 417 KB (-40%), and 120 new child notes hold 290 KB, so total storage grew 2% while each read of a hot note got much smaller. Every hot note a run reached ended under the cap, apart from two at 6001 and 6076 bytes from a run that read "6 KB" as KiB.
+
+- Six runs pushing at once lost the push race often enough that one commit was stranded and `end` deleted its branch. It was recovered by hand. `end` now pushes leftovers first, and `save.sh` retries five times with a back-off.
+- A compress changed a command argument unnoticed, so the evidence check now covers commands with flags, bare file names and `file:line` citations.
+
 ## Deferred operations
 
 **Forget**: remove a note from the live set with `git rm`, git history being the archive. A note is forgotten when it had no reads in 45 days and its newest vote is older than 45 days, or when it has held an open `DISPUTED` line for more than 45 days. A note other notes link to is merged into the linking note instead.
