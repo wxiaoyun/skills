@@ -77,19 +77,17 @@ def resolve(token, notes, by_tail):
     return hits[0] if len(hits) == 1 else None
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--days', type=float, default=7)
-    ap.add_argument('--top', type=int, default=25)
-    ap.add_argument('--cold', action='store_true', help='also list notes nobody read')
-    a = ap.parse_args()
+def collect(days, tk=TK):
+    """Returns (notes, per-note stats, session logs scanned) for the notes under tk.
 
-    notes = {os.path.relpath(p, TK) for p in glob.glob(os.path.join(TK, '**', '*.md'), recursive=True)}
+    Log paths are resolved against tk's note set, so tk can be a worktree of ~/tk.
+    """
+    notes = {os.path.relpath(p, tk) for p in glob.glob(os.path.join(tk, '**', '*.md'), recursive=True)}
     by_tail = defaultdict(list)
     for n in notes:
         by_tail[n.rsplit('/', 1)[-1]].append(n)
 
-    cutoff = time.time() - a.days * 86400
+    cutoff = time.time() - days * 86400
     logs = glob.glob(os.path.join(HOME, '.claude/projects/**/*.jsonl'), recursive=True)
     logs += glob.glob(os.path.join(HOME, '.pi/agent/sessions/**/*.jsonl'), recursive=True)
     logs = [p for p in logs if os.path.getmtime(p) >= cutoff]
@@ -126,10 +124,22 @@ def main():
                 x['whole'] += kind == 'whole'
                 x['chars'] += len(out) // len(mentioned)
                 x['last'] = max(x['last'], ts[:10])
+    return notes, st, logs
 
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('--days', type=float, default=7)
+    ap.add_argument('--top', type=int, default=25)
+    ap.add_argument('--cold', action='store_true', help='also list notes nobody read')
+    a = ap.parse_args()
+
+    notes, st, logs = collect(a.days)
     total = sum(x['chars'] for x in st.values()) or 1
     ranked = sorted(((x['chars'], n) for n, x in st.items() if n in notes), reverse=True)
-    print(f'{len(logs)} session logs, last {a.days:g} days, {total / 1e3:.0f} KB read from {len(ranked)} notes')
+    readers = set().union(*(x['sessions'] for x in st.values()))
+    print(f'{len(logs)} session logs, last {a.days:g} days, {total / 1e3:.0f} KB read from {len(ranked)} notes '
+          f'by {len(readers)} sessions, {total / 1e3 / max(len(readers), 1):.1f} KB per session')
     print(f"{'read_kb':>8} {'share':>6} {'sess':>5} {'reads':>6} {'whole':>6} {'listed':>7} {'writes':>7} {'kb/read':>8} {'size_kb':>8}  note")
     cum = 0
     for chars, n in ranked[:a.top]:

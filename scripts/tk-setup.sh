@@ -17,11 +17,11 @@ cat > .git/hooks/pre-commit <<'HOOK'
 cd "$(git rev-parse --show-toplevel)" || exit 1
 # Blocks only what this commit adds past the size limits, so a note already over them still
 # takes votes and fixes: a body line over 600 characters (table rows excepted), a body grown
-# past 12 KB, and a changed keywords line over 30 entries or index over 300 characters.
+# past 6 KB, and a changed keywords line over 30 entries or index over 300 characters.
 grown=$(git diff --cached --name-only --diff-filter=AM -- '*.md' | while read -r f; do
   new=$(git show ":$f" | tail -n +6 | wc -c)
   old=$(git show "HEAD:$f" 2>/dev/null | tail -n +6 | wc -c)
-  [ "$new" -le 12000 ] || [ "$new" -le "$old" ] || echo "$f: body grew to $((new / 1000)) KB, past 12 KB, move the section you edited into its own note"
+  [ "$new" -le 6000 ] || [ "$new" -le "$old" ] || echo "$f: body grew to $((new / 1000)) KB, past 6 KB, move the section you edited into its own note"
   git diff --cached -U0 -- "$f" | awk -v f="$f" '
     /^@@/ { split($3, a, ","); n = substr(a[1], 2) - 1; h = 1; next }
     h && /^\+/ { n++; s = substr($0, 2)
@@ -105,7 +105,7 @@ if [ -d "$HOME/.claude" ] && command -v jq >/dev/null; then
     ((["Read", "Edit"] | map("\(.)(~/tk/**)"))
       + (if $real == ($h + "/tk") then [] else ["Read", "Edit"] | map("\(.)(/\($real)/**)") end)
       + (["add", "commit", "pull", "push", "status", "log", "diff", "show", "mv"] | map("Bash(git -C ~/tk \(.) *)"))
-      + (["~", $h] | map("Bash(sh \(.)/.claude/skills/tribal-knowledge/*)"))) as $r
+      + (["~", $h] | map("Bash(sh \(.)/.claude/skills/tribal-knowledge/*)", "Bash(python3 \(.)/.claude/skills/sleep/sleep.py *)"))) as $r
     | .permissions.allow = ((.permissions.allow // []) + ($r - (.permissions.allow // [])))
     | def hook($event; $cmd; $entry): .hooks[$event] = ([(.hooks[$event] // [])[] | select(any(.hooks[]?; .command == $cmd) | not)] + [$entry]);
       hook("PreToolUse"; $pre; {matcher: "Bash", hooks: [{type: "command", command: $pre}]})

@@ -68,17 +68,17 @@ pass "back to valid"
 git commit -qm base
 
 body() { printf "%$1s" | tr ' ' x | fold -w 100; }
-note tools/big.md '[]' "$(body 13000)"
+note tools/big.md '[]' "$(body 7000)"
 git add -A
-"$hook" 2>&1 | grep -q 'tools/big.md: body grew to 13 KB' || { echo "FAIL: size message"; exit 1; }
-reject "new note past 12 KB"
+"$hook" 2>&1 | grep -q 'tools/big.md: body grew to 7 KB' || { echo "FAIL: size message"; exit 1; }
+reject "new note past 6 KB"
 git commit -qm big --no-verify
 sh "$vote" tools/big.md + >/dev/null
-pass "vote on a note already past 12 KB"
-note tools/big.md '[]' "$(body 12500)"
-pass "shrinking a note still past 12 KB"
-note tools/big.md '[]' "$(body 13500)"
-reject "growing a note past 12 KB"
+pass "vote on a note already past 6 KB"
+note tools/big.md '[]' "$(body 6500)"
+pass "shrinking a note still past 6 KB"
+note tools/big.md '[]' "$(body 7500)"
+reject "growing a note past 6 KB"
 git rm -qf tools/big.md && git commit -qm unbig
 
 note tools/long.md '[]' "- $(printf '%700s' | tr ' ' x)"
@@ -166,7 +166,7 @@ if command -v jq >/dev/null; then
   # An installed skill, so setup links the pi extension.
   mkdir -p "$HOME/.agents/skills" "$HOME/.pi/agent" && ln -s "$(dirname "$vote")" "$HOME/.agents/skills/tribal-knowledge"
   sh "$setup" >/dev/null && sh "$setup" >/dev/null
-  jq -e --arg real "$(cd "$HOME/tk" && pwd -P)" '.theme == "dark" and (.permissions.allow | index("Bash(ls)") and index("Edit(~/tk/**)") and index("Edit(/\($real)/**)") and length == 16)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: settings merge"; exit 1; }
+  jq -e --arg real "$(cd "$HOME/tk" && pwd -P)" '.theme == "dark" and (.permissions.allow | index("Bash(ls)") and index("Edit(~/tk/**)") and index("Edit(/\($real)/**)") and index("Bash(python3 ~/.claude/skills/sleep/sleep.py *)") and length == 18)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: settings merge"; exit 1; }
   jq -e '(.hooks.PreToolUse | length == 2 and .[0].hooks[0].command == "x" and .[1].matcher == "Bash") and (.hooks.Stop | length == 1 and (.[0].hooks[0].command | endswith("guard.sh stop"))) and (.hooks.SubagentStop | length == 1)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: hooks merge"; exit 1; }
   [ -f "$HOME/.pi/agent/extensions/tk-guard.ts" ] || { echo "FAIL: pi extension link"; exit 1; }
 fi

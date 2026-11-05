@@ -2,12 +2,13 @@
 # Usage: save.sh '<what changed>' <path>...
 # Commits only the given ~/tk paths as "tk: <what changed>", then rebases onto the
 # upstream and pushes, retrying when another session pushed first. Other sessions' uncommitted
-# edits in the shared checkout are neither committed nor lost.
+# edits in the shared checkout are neither committed nor lost. TK overrides the checkout, such as
+# the sleep skill's worktree.
 set -u
 
 [ $# -ge 2 ] || { echo "usage: save.sh '<what changed>' <path>..." >&2; exit 2; }
 msg=$1; shift
-g() { git -C "$HOME/tk" "$@"; }
+g() { git -C "${TK:-$HOME/tk}" "$@"; }
 fail() { echo "save.sh: $*" >&2; exit 1; }
 
 # The old side of a `git mv` is gone from disk and index, so git add rejects it. The commit still takes it.

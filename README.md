@@ -23,13 +23,21 @@ To sync across machines, add a git remote to `~/tk`. Agents rebase onto it and p
 To find hot notes, rank them by how much context agents spent reading them, using Claude Code and pi session logs. Split the top ones, or move their most-read sections into separate notes:
 
 ```sh
-python3 scripts/tk-usage.py --days 7
+python3 skills/sleep/tk-usage.py --days 7
 ```
 
 Required: agents load skills by matching descriptions, which often misses. Add this line to your global `AGENTS.md` or `CLAUDE.md` so the skill actually gets used:
 
 ```markdown
 - Before working with a tool, repo, or service, load the `tribal-knowledge` skill first, then search `~/tk` with its keyword search. Record hard-won findings there as you learn them, and vote and record before your final answer.
+```
+
+## sleep
+
+Consolidates `~/tk`: merges notes that overlap, and compresses and sharpens the most-read ones. Run `/sleep` (optionally with note paths or directories) by hand or from your own cron. It works in a private worktree at `~/tk/.sleep` and pushes one commit per operation to `~/tk`'s upstream, so it needs a git remote. A save that drops any evidence citation is refused. Deferred operations and the success metric are in [docs/sleep-v1.md](docs/sleep-v1.md).
+
+```sh
+npx skills add wxiaoyun/skills -g --skill sleep
 ```
 
 ## License
