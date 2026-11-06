@@ -96,12 +96,13 @@ fi
 # Scoped to ~/tk and the skill's own scripts. Claude Code matches Read and Edit rules
 # against the file's real path, so a symlinked home also needs the resolved path.
 # Also hooks the skill's guard.sh: on Bash, to block shell writes to notes and git commands that
-# discard other sessions' edits, and on Stop and SubagentStop, to catch notes edited but never saved.
+# discard other sessions' edits, after Edit and Write, to report a note's broken limits at once,
+# and on Stop and SubagentStop, to catch notes edited but never saved.
 s="$HOME/.claude/settings.json"
 if [ -d "$HOME/.claude" ] && command -v jq >/dev/null; then
   [ -s "$s" ] || echo '{}' > "$s"
   guard='sh ~/.claude/skills/tribal-knowledge/guard.sh'
-  jq --arg h "$HOME" --arg real "$(pwd -P)" --arg pre "$guard" --arg stop "$guard stop" '
+  jq --arg h "$HOME" --arg real "$(pwd -P)" --arg pre "$guard" --arg stop "$guard stop" --arg lint "$guard lint" '
     ((["Read", "Edit"] | map("\(.)(~/tk/**)"))
       + (if $real == ($h + "/tk") then [] else ["Read", "Edit"] | map("\(.)(/\($real)/**)") end)
       + (["add", "commit", "pull", "push", "status", "log", "diff", "show", "mv"] | map("Bash(git -C ~/tk \(.) *)"))
@@ -109,6 +110,7 @@ if [ -d "$HOME/.claude" ] && command -v jq >/dev/null; then
     | .permissions.allow = ((.permissions.allow // []) + ($r - (.permissions.allow // [])))
     | def hook($event; $cmd; $entry): .hooks[$event] = ([(.hooks[$event] // [])[] | select(any(.hooks[]?; .command == $cmd) | not)] + [$entry]);
       hook("PreToolUse"; $pre; {matcher: "Bash", hooks: [{type: "command", command: $pre}]})
+    | hook("PostToolUse"; $lint; {matcher: "Edit|Write|MultiEdit", hooks: [{type: "command", command: $lint}]})
     | hook("Stop"; $stop; {hooks: [{type: "command", command: $stop}]})
     | hook("SubagentStop"; $stop; {hooks: [{type: "command", command: $stop}]})
   ' "$s" > "$s.tmp"

@@ -1,6 +1,7 @@
 // pi extension for ~/tk, linked into ~/.pi/agent/extensions by tk-setup.sh. Applies guard.sh's rules:
-// blocks bash commands that write notes or discard other sessions' edits, and before a run settles
-// asks the agent once to save the notes it edited and left unsaved.
+// blocks bash commands that write notes or discard other sessions' edits, reports the limits a
+// just-edited note breaks, and before a run settles asks the agent once to save the notes it
+// edited and left unsaved.
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -34,6 +35,18 @@ export default function (pi: ExtensionAPI) {
     } catch (e) {
       const err = e as { status?: number; stderr?: Buffer };
       if (err.status === 2) return { block: true, reason: String(err.stderr ?? "").trim() };
+    }
+    return undefined;
+  });
+
+  // After an edit or write to a note, report the limits it breaks now instead of at a blocked save.
+  pi.on("tool_result", async (event) => {
+    if (event.isError || (event.toolName !== "edit" && event.toolName !== "write")) return undefined;
+    try {
+      execFileSync("sh", [guard, "lint"], { input: JSON.stringify({ tool_input: { path: event.input.path } }), stdio: ["pipe", "ignore", "pipe"] });
+    } catch (e) {
+      const err = e as { status?: number; stderr?: Buffer };
+      if (err.status === 2) return { content: [...event.content, { type: "text", text: String(err.stderr ?? "").trim() }] };
     }
     return undefined;
   });

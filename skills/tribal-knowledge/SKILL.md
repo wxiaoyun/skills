@@ -14,7 +14,7 @@ description: Search and update ~/tk, shared notes on tool pitfalls, how repos an
 - Environment facts: how to reach logs, clusters, CI, dashboards.
 - Repo internals learned by tracing code.
 
-Not here: user preferences, anything a quick read of the code or README answers, one event's details such as an alarm firing's timeline, numbers or verdict (your answer carries them), and secrets of any kind.
+Not here: user preferences, anything a quick read of the code or README answers, and secrets of any kind. From one event, such as an alarm firing, record the lasting rule it taught with the command that checks it. The event's times, ids, numbers and verdict go in your answer.
 
 ## Searching
 
@@ -24,6 +24,7 @@ sh <this skill's directory>/find.sh rtk proxy 'connection reset'
 
 - It ranks notes by keyword hits, then text hits, then newest vote, and prints the top 10 with their `index` and `votes` lines. Judge candidates by those before opening any. Specific identifiers rank better than generic words.
 - Before reading a long note, outline it with `find.sh -o <note>`, then read only the range you need with `sed -n 'A,Bp' <note>` or `rg -n -C8 '<term>' <note>`.
+- When nothing fits, search again with fewer and more specific identifiers, such as the error string or the command name.
 
 ## Note format
 
@@ -57,13 +58,14 @@ Free-form body. Terse, pitfalls first. See also [kubectl](kubectl.md).
 - The note is wrong and you know the truth: fix it, drop any related `DISPUTED` line, and vote `reset`, which sets `[+today]`.
 - The note looks wrong but the truth is unclear: `-`, and add `> DISPUTED YYYY-MM-DD: <reason>` next to the claim.
 - A new note starts at `[+today]`.
+- Your own edit re-checks only what you wrote. Vote on the claims you relied on and re-checked.
 
 ## Writing
 
 - Write as soon as you learn something. Before your final answer, make sure every note you relied on got its vote and every finding got saved.
 - Update an existing note rather than adding a duplicate, and extend its `keywords` and `index` to cover the addition. When a search missed a note that turned out relevant, add the missed terms to its `keywords`.
 - Change notes with your file-edit tool and votes with `vote.sh`. A shell write (sed, python, a redirect) forces a re-read before your next edit.
-- Your task brief sets your write scope. Under a brief that says to write nothing, hand the notes and votes you would have written back to whoever briefed you.
+- Your task brief sets your write scope. A brief that says read-only or write nothing covers `~/tk` too: hand the notes and votes you would have written back to whoever briefed you.
 - If `~/tk` does not exist, ask the user to run the setup script from https://github.com/wxiaoyun/skills.
 
 ## Saving
@@ -76,4 +78,5 @@ sh <this skill's directory>/save.sh '<what changed>' <path>...
 
 - Pass every path the change touched, both sides of a `git mv` included, written out literally, since zsh does not word-split a `$VAR` holding several.
 - A blocked save's last line names what to fix. Fix it and save again once. A failed save never blocks your answer.
+- `push failed` means the commit is safe in `~/tk`, and the next `save.sh` from any session pushes it. Move on and leave the push to `save.sh`.
 - Undo your own edit with your file-edit tool. `git checkout`, `restore`, `reset` or `stash` in `~/tk` discards other sessions' unsaved notes.

@@ -135,14 +135,22 @@ git --git-dir="$HOME/remote.git" cat-file -e HEAD:tools/moved.md && ! git --git-
 # guard.sh: the Claude Code hooks (and, through tk-guard.ts, pi) for the shared checkout.
 if command -v jq >/dev/null; then
   guard="$(dirname "$vote")/guard.sh"
-  bash_hook() { printf '%s' "$1" | jq -Rs '{tool_input: {command: .}}' | sh "$guard" 2>/dev/null; }
+  # The shell's directory comes from the hook's cwd, $HOME unless a case says otherwise.
+  bash_hook() { printf '%s' "$1" | jq -Rs --arg cwd "${2:-$HOME}" '{tool_input: {command: .}, cwd: $cwd}' | sh "$guard" 2>/dev/null; }
   for c in 'cd ~/tk && git checkout -- tools/rtk.md' 'git -C ~/tk stash' "git -C \"\$HOME/tk\" reset --hard" \
-    "sed -i 's/a/b/' ~/tk/tools/rtk.md" 'cd ~/tk && printf x >> tools/rtk.md' \
+    "sed -i 's/a/b/' ~/tk/tools/rtk.md" 'cd ~/tk && printf x >> tools/rtk.md' 'T=~/tk; git -C $T reset --hard' \
+    'cat ~/tk/tools/rtk.md; git -C $UNSET checkout x' "printf x | tee -a \"\$HOME/tk/tools/rtk.md\"" \
     "$(printf "cd ~/tk && python3 - <<'EOF'\nopen('tools/rtk.md', 'w').write('x')\nEOF")"; do
     ! bash_hook "$c" || { echo "FAIL: guard should block: $c"; exit 1; }
   done
+  ! bash_hook 'git checkout main' "$HOME/tk" || { echo "FAIL: guard should block git checkout run inside ~/tk"; exit 1; }
+  ! bash_hook "sed -i 's/a/b/' tools/rtk.md" "$HOME/tk/tools/.." || { echo "FAIL: guard should block sed -i inside ~/tk"; exit 1; }
   for c in "cd ~/tk && sh x/save.sh 'note the git reset trap' tools/rtk.md" 'cd ~/tk && rg -n proxy tools > /tmp/out.md' \
-    'git -C ~/tk status && sh x/vote.sh tools/rtk.md + >/dev/null' 'git checkout main' "sed -i 's/a/b/' src/main.go"; do
+    'git -C ~/tk status && sh x/vote.sh tools/rtk.md + >/dev/null' 'git checkout main' "sed -i 's/a/b/' src/main.go" \
+    'cat ~/tk/tools/rtk.md; git -C ~/code/repo-worktree-triage checkout --detach origin/master' \
+    'W=~/code/repo-worktree; cat ~/tk/a.md; git -C $W checkout --detach origin/master' \
+    'cd ~/code && git -C nexus checkout x && cat ~/tk/tools/rtk.md' \
+    "rg -n 'sed -i|open\\(' ~/tk/tools" 'rg -c git ~/tk/tools; sed -i s/a/b/ ~/code/x/main.go'; do
     bash_hook "$c" || { echo "FAIL: guard should allow: $c"; exit 1; }
   done
   # Stop blocks once while a note this session edited is unsaved. tools/rtk.md is still modified here.
@@ -157,6 +165,14 @@ if command -v jq >/dev/null; then
   rm "$HOME/sub.jsonl"
   edit "$HOME/tk/tools/moved.md"; stop || { echo "FAIL: stop with every note saved"; exit 1; }
   [ "$(sh "$guard" dirty tools/rtk.md tools/moved.md)" = tools/rtk.md ] || { echo "FAIL: guard.sh dirty"; exit 1; }
+  # lint reports what a just-written note adds past the hook's limits.
+  lint() { printf '{"tool_input":{"file_path":"%s"}}' "$1" | sh "$guard" lint 2>/dev/null; }
+  note tools/fresh.md '[]'
+  lint "$HOME/tk/tools/fresh.md" || { echo "FAIL: lint on a clean new note"; exit 1; }
+  note tools/fresh.md '[]' "$(printf 'x%.0s' $(seq 700))"
+  ! lint "$HOME/tk/tools/fresh.md" || { echo "FAIL: lint misses a 700-character line"; exit 1; }
+  lint "$HOME/outside.md" || { echo "FAIL: lint outside ~/tk"; exit 1; }
+  rm tools/fresh.md
 fi
 
 # The settings merge keeps existing rules and adds each tk rule once.
@@ -167,7 +183,7 @@ if command -v jq >/dev/null; then
   mkdir -p "$HOME/.agents/skills" "$HOME/.pi/agent" && ln -s "$(dirname "$vote")" "$HOME/.agents/skills/tribal-knowledge"
   sh "$setup" >/dev/null && sh "$setup" >/dev/null
   jq -e --arg real "$(cd "$HOME/tk" && pwd -P)" '.theme == "dark" and (.permissions.allow | index("Bash(ls)") and index("Edit(~/tk/**)") and index("Edit(/\($real)/**)") and index("Bash(python3 ~/.claude/skills/sleep/sleep.py *)") and length == 18)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: settings merge"; exit 1; }
-  jq -e '(.hooks.PreToolUse | length == 2 and .[0].hooks[0].command == "x" and .[1].matcher == "Bash") and (.hooks.Stop | length == 1 and (.[0].hooks[0].command | endswith("guard.sh stop"))) and (.hooks.SubagentStop | length == 1)' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: hooks merge"; exit 1; }
+  jq -e '(.hooks.PreToolUse | length == 2 and .[0].hooks[0].command == "x" and .[1].matcher == "Bash") and (.hooks.Stop | length == 1 and (.[0].hooks[0].command | endswith("guard.sh stop"))) and (.hooks.SubagentStop | length == 1) and (.hooks.PostToolUse | length == 1 and (.[0].hooks[0].command | endswith("guard.sh lint")))' "$HOME/.claude/settings.json" >/dev/null || { echo "FAIL: hooks merge"; exit 1; }
   [ -f "$HOME/.pi/agent/extensions/tk-guard.ts" ] || { echo "FAIL: pi extension link"; exit 1; }
 fi
 echo ok
