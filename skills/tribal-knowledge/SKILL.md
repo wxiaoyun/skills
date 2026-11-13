@@ -78,5 +78,6 @@ sh <this skill's directory>/save.sh '<what changed>' <path>...
 
 - Pass every path the change touched, both sides of a `git mv` included, written out literally, since zsh does not word-split a `$VAR` holding several.
 - A blocked save's last line names what to fix. Fix it and save again once. A failed save never blocks your answer.
-- `push failed` means the commit is safe in `~/tk`, and the next `save.sh` from any session pushes it. Move on and leave the push to `save.sh`.
+- `push failed` or `rebase onto upstream failed` means the commit is safe in `~/tk`, and the next `save.sh` from any session pushes it. Move on and leave the push to `save.sh`.
+- `vote.sh` commits a vote by itself when the vote is the note's only change. Save a note you also edited as usual.
 - Undo your own edit with your file-edit tool. `git checkout`, `restore`, `reset` or `stash` in `~/tk` discards other sessions' unsaved notes.

@@ -131,6 +131,12 @@ git mv tools/saved.md tools/moved.md
 sh "$save" 'move saved' tools/saved.md tools/moved.md >/dev/null || { echo "FAIL: save.sh after git mv"; exit 1; }
 git --git-dir="$HOME/remote.git" cat-file -e HEAD:tools/moved.md && ! git --git-dir="$HOME/remote.git" cat-file -e HEAD:tools/saved.md 2>/dev/null || { echo "FAIL: save.sh pushed the rename"; exit 1; }
 ! sh "$save" typo tools/nope.md 2>/dev/null || { echo "FAIL: save.sh with a missing note"; exit 1; }
+note tools/v.md '[+2026-10-01]' && git add tools/v.md && git commit -qm v --no-verify
+sh "$vote" tools/v.md + >/dev/null
+[ -z "$(git status --porcelain tools/v.md)" ] || { echo "FAIL: vote.sh commits a lone vote"; exit 1; }
+printf 'more\n' >> tools/v.md && sh "$vote" tools/v.md - >/dev/null
+[ "$(git status --porcelain tools/v.md)" = ' M tools/v.md' ] || { echo "FAIL: vote.sh leaves a note with other edits uncommitted"; exit 1; }
+git checkout -q -- tools/v.md
 
 # guard.sh: the Claude Code hooks (and, through tk-guard.ts, pi) for the shared checkout.
 if command -v jq >/dev/null; then
@@ -140,7 +146,9 @@ if command -v jq >/dev/null; then
   for c in 'cd ~/tk && git checkout -- tools/rtk.md' 'git -C ~/tk stash' "git -C \"\$HOME/tk\" reset --hard" \
     "sed -i 's/a/b/' ~/tk/tools/rtk.md" 'cd ~/tk && printf x >> tools/rtk.md' 'T=~/tk; git -C $T reset --hard' \
     'cat ~/tk/tools/rtk.md; git -C $UNSET checkout x' "printf x | tee -a \"\$HOME/tk/tools/rtk.md\"" \
-    "$(printf "cd ~/tk && python3 - <<'EOF'\nopen('tools/rtk.md', 'w').write('x')\nEOF")"; do
+    "$(printf "cd ~/tk && python3 - <<'EOF'\nopen('tools/rtk.md', 'w').write('x')\nEOF")" \
+    "$(printf "python3 - <<'EOF'\nfrom pathlib import Path\n(Path.home()/\"tk/tools/rtk.md\").write_text('x')\nEOF")" \
+    'cp /tmp/x.md ~/tk/tools/' 'rsync -a /tmp/p/ "$HOME/tk/alarms/" 2>/dev/null' 'cd ~/tk && mv /tmp/x.md tools/rtk.md'; do
     ! bash_hook "$c" || { echo "FAIL: guard should block: $c"; exit 1; }
   done
   ! bash_hook 'git checkout main' "$HOME/tk" || { echo "FAIL: guard should block git checkout run inside ~/tk"; exit 1; }
@@ -150,7 +158,8 @@ if command -v jq >/dev/null; then
     'cat ~/tk/tools/rtk.md; git -C ~/code/repo-worktree-triage checkout --detach origin/master' \
     'W=~/code/repo-worktree; cat ~/tk/a.md; git -C $W checkout --detach origin/master' \
     'cd ~/code && git -C nexus checkout x && cat ~/tk/tools/rtk.md' \
-    "rg -n 'sed -i|open\\(' ~/tk/tools" 'rg -c git ~/tk/tools; sed -i s/a/b/ ~/code/x/main.go'; do
+    "rg -n 'sed -i|open\\(' ~/tk/tools" 'rg -c git ~/tk/tools; sed -i s/a/b/ ~/code/x/main.go' \
+    'git -C ~/tk stash list' 'cp ~/tk/tools/rtk.md /tmp/rtk.md'; do
     bash_hook "$c" || { echo "FAIL: guard should allow: $c"; exit 1; }
   done
   # Stop blocks once while a note this session edited is unsaved. tools/rtk.md is still modified here.

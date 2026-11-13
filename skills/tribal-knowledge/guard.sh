@@ -96,7 +96,7 @@ in_tk() {
 block() {
   case $1 in
   git) echo "tk guard: every session shares the ~/tk checkout, so git checkout, restore, reset, stash or clean there can discard other sessions' unsaved notes. Undo your own change with the Edit tool. save.sh commits only the paths you pass." >&2 ;;
-  *) echo "tk guard: change notes in ~/tk with the Edit or Write tool, and votes with vote.sh. A shell write forces a re-read before your next edit and skips the permission rules scoped to ~/tk." >&2 ;;
+  *) echo "tk guard: this write was not applied. Redo it now with the Edit or Write tool (votes with vote.sh), or the note is lost. A shell write forces a re-read before your next edit and skips the permission rules scoped to ~/tk." >&2 ;;
   esac
   exit 2
 }
@@ -107,12 +107,17 @@ git_check() {
   shift
   target=$dir
   [ "${1:-}" = -C ] && { target=${2:-}; shift 2; }
-  case ${1:-} in checkout | restore | reset | stash | clean) in_tk "$target" && block git ;; esac
+  case ${1:-} in
+  checkout | restore | reset | clean) in_tk "$target" && block git ;;
+  stash) case ${2:-} in list | show) ;; *) in_tk "$target" && block git ;; esac ;;
+  esac
   return 0
 }
 
 named=
 printf '%s\n' "$cmd" | grep -Fq -e '~/tk' -e '$HOME/tk' -e '${HOME}/tk' -e "$tk" -e "$real" && named=1
+# Python can build the path from the home directory, as Path.home() / "tk/...".
+printf '%s\n' "$cmd" | grep -Eq "Path\.home\(\) */ *['\"]tk[/'\"]" && named=1
 case $dir/ in "$tk"/* | "$real"/*) ;; *) [ -n "$named" ] || exit 0 ;; esac
 
 # Python writes live in heredocs and quoted code, so they are matched on the raw text.
@@ -141,6 +146,12 @@ while IFS= read -r s; do
   case " $s " in
   *' sed -i'* | *' perl -i'* | *' perl -pi'*)
     for w; do case $w in -* | sed | perl | Q) ;; *) in_tk "$w" && block write ;; esac; done ;;
+  esac
+  # cp, mv, rsync and install write to their last argument, before any redirection.
+  case $1 in cp | mv | rsync | install)
+    last=
+    for w; do case $w in *'>'*) break ;; esac; last=$w; done
+    in_tk "$last" && block write ;;
   esac
   # Redirections and tee into a note. Targets outside ~/tk, such as /tmp, are fine.
   for w in $(printf '%s\n' "$s" | grep -Eo '(>>?|tee( -a)?)[[:space:]]*[^[:space:]>]+\.md' | sed -E 's/^(>>?|tee( -a)?)[[:space:]]*//'); do

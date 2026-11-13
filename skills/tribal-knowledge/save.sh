@@ -31,7 +31,11 @@ g rev-parse -q --verify '@{u}' >/dev/null || { echo "saved $head locally, no ups
 out=''
 for try in 1 2 3 4 5; do
   g fetch -q || { sleep "$try"; continue; }
-  g rebase -q --autostash '@{u}' || { g rebase --abort 2>/dev/null; fail "rebase onto upstream failed, $head is committed locally but not pushed"; }
+  g rebase -q --autostash '@{u}' || {
+    c=$(g diff --name-only --diff-filter=U | paste -sd ' ' -)
+    g rebase --abort 2>/dev/null
+    fail "rebase onto upstream failed${c:+ in $c}, $head is committed locally but not pushed. Leave git alone in ~/tk and tell the user which notes conflict"
+  }
   out=$(g push -q 2>&1) && { echo "saved $(g rev-parse --short HEAD), pushed"; exit 0; }
   sleep "$try"
 done

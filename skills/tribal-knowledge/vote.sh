@@ -29,3 +29,10 @@ awk -v m="$2" -v d="$(date +%F)" '
 ' "$f" > "$f.tmp"
 mv "$f.tmp" "$f"
 sed -n 4p "$f"
+# Commit the vote locally, since a vote often never reaches a save.sh. The next save.sh from any
+# session pushes it. A note with other unsaved edits is left for its editor's save.sh.
+d=$(dirname "$f") b=$(basename "$f")
+if [ "$(git -C "$d" diff --numstat -- "$b" 2>/dev/null | cut -f1,2)" = "$(printf '1\t1')" ]; then
+  git -C "$d" commit -q -m "tk: vote $b" -- "$b" >/dev/null 2>&1 ||
+    echo "vote.sh: vote written but not committed, run save.sh on this note" >&2
+fi
